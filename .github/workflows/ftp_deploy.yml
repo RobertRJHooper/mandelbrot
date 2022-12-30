@@ -15,4 +15,4 @@ jobs:
       # - name: 📄 Upload File
       # run: lftp -e "put -O / ./README.md" ${{ secrets.FTP_HOSTNAME }}
       - name: 📁 Upload Folder
-        run: lftp -e "mirror --parallel=100 -R /public_html/ /upload_text/" ${{ secrets.FTP_HOSTNAME }}
+        run: lftp -e "mirror --parallel=100 -R ./public_html /" ${{ secrets.FTP_HOSTNAME }}
