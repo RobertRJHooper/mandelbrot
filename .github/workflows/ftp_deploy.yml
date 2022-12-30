@@ -1,6 +1,9 @@
 name: 🚀 FTP Deploy
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches:
+      - main
 jobs:
   ftp-deploy:
     runs-on: ubuntu-latest
@@ -10,25 +13,14 @@ jobs:
       - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
       - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
       - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-      - name: Check out repository code
-        uses: actions/checkout@main
-      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
-      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
-      - name: List files in the repository
-        run: |
-          ls ${{ github.workspace }}
       - run: echo "🍏 This job's status is ${{ job.status }}."
 
-      - name: liststuff
-        run: ls
       - name: 📦 Get LFTP
         run: sudo apt install lftp
       - name: 🛠️ Configure LFTP
         run: mkdir ~/.lftp && echo "set ssl:verify-certificate false;" >> ~/.lftp/rc
       - name: 🔑 Load Secrets
         run: echo "machine ${{ secrets.FTP_HOSTNAME }} login ${{ secrets.FTP_USERNAME }} password ${{ secrets.FTP_PASSWORD }}" > ~/.netrc
-      # - name: 📄 Upload File
-      # run: lftp -e "put -O / ./README.md" ${{ secrets.FTP_HOSTNAME }}
       - name: 📁 Upload Folder
         run: lftp -e "mirror --parallel=100 -R public_html /" ${{ secrets.FTP_HOSTNAME }}
 
