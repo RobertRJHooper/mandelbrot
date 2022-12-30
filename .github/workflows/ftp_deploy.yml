@@ -6,6 +6,8 @@ jobs:
     steps:
       - name: 🛒 Checkout
         uses: actions/checkout@v2
+      - name liststuff
+        run: ls
       - name: 📦 Get LFTP
         run: sudo apt install lftp
       - name: 🛠️ Configure LFTP
