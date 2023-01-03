@@ -28,7 +28,7 @@ class MandelbrotSet extends React.Component {
                 ref={this.canvas}
                 width={this.props.width}
                 height={this.props.height}
-                style={{width: "100%", height: "100%"}}>
+                style={{objectFit: "cover", width: "100%", height: "100%"}}>
             </canvas>
         );
     }
@@ -58,14 +58,14 @@ class MandelbrotSet extends React.Component {
             resolution_ = resolution;
         }
 
-        // update state
+        // save initial model state
         this.setState({
             modelID: modelID,
             iteration: -1,
             image: null,
         });
 
-        // debug
+        // diagnostics
         console.debug('running model', modelID);
 
         // start calculations on worker
