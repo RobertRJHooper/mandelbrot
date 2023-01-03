@@ -37,17 +37,17 @@ function mb_in_secondary(c) {
 }
 
 function ageToRGB(age) {
-  let hue = math.mod(age / 30 + 0.6, 1);
+  let hue = math.mod(age / 30 + 0.61, 1);
   return hslToRgb(hue, 0.9, 0.5);
 }
 
 class MandelbrotSetModel {
-  constructor(center, resolution, width, height, max_iterations) {
+  constructor(center, resolution, width, height, maxIterations) {
     this.center = center;
     this.resolution = resolution;
     this.width = width;
     this.height = height;
-    this.max_iterations = max_iterations;
+    this.maxIterations = maxIterations;
 
     // number of iterations completed
     this.iteration = 0;
@@ -130,7 +130,7 @@ class MandelbrotSetModel {
           continue; // already determined
         }
 
-        if (point.age >= this.max_iterations) {
+        if (point.age >= this.maxIterations) {
           continue; // limit reached
         }
 
