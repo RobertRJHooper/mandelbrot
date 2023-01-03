@@ -1,6 +1,6 @@
 "use strict";
 
-function mb_iterate(z, c) {
+function mbIterate(z, c) {
   let zr = z.re;
   let zi = z.im;
   let r = zr * zr - zi * zi + c.re;
@@ -8,14 +8,14 @@ function mb_iterate(z, c) {
   return math.complex(r, i);
 }
 
-function mb_escaped(z) {
+function mbEscaped(z) {
   let zr = z.re;
   let zi = z.im;
   return zr * zr + zi * zi > 4;
 }
 
 // is the point in the main cardiod when zn converges?
-function mb_in_primary(c) {
+function mbInPrimary(c) {
   if (c.re < 0.23 && c.re > -0.5 && c.im < 0.5 && c.im > -0.5) {
     return true; // short cut positive
   }
@@ -30,7 +30,7 @@ function mb_in_primary(c) {
 }
 
 // is the point in the secondary circle when zn has period two in limit?
-function mb_in_secondary(c) {
+function mbInSecondary(c) {
   let zr = c.re + 1;
   let zi = c.im;
   return zr * zr + zi * zi < 1 / 16;
@@ -95,7 +95,7 @@ class MandelbrotSetModel {
           c: null,
           z: z0,
           age: 0,
-          in_mbs: null,
+          inMBS: null,
         });
       }
     }
@@ -116,17 +116,17 @@ class MandelbrotSetModel {
       for (let point of this.live) {
         const c = point.c;
 
-        if(mb_escaped(c)) {
-          point.in_mbs = false;
-        } else if (mb_in_primary(c) || mb_in_secondary(c)) {
-          point.in_mbs = true;
+        if(mbEscaped(c)) {
+          point.inMBS = false;
+        } else if (mbInPrimary(c) || mbInSecondary(c)) {
+          point.inMBS = true;
         }
       }
     }
 
     if (this.iteration > 0) {
       for (let point of this.live) {
-        if (point.in_mbs !== null) {
+        if (point.inMBS !== null) {
           continue; // already determined
         }
 
@@ -134,11 +134,11 @@ class MandelbrotSetModel {
           continue; // limit reached
         }
 
-        point.z = mb_iterate(point.z, point.c);
+        point.z = mbIterate(point.z, point.c);
         point.age += 1;
 
-        if (mb_escaped(point.z)) {
-          point.in_mbs = false;
+        if (mbEscaped(point.z)) {
+          point.inMBS = false;
         }
       }
     }
@@ -153,10 +153,9 @@ class MandelbrotSetModel {
     const width = this.width;
     
     for (let point of this.live) {
-      const in_mbs = point.in_mbs;
       const idx = (point.y * width + point.x) * 4;
 
-      if(in_mbs === false) {
+      if(point.inMBS === false) {
         const rgb = ageToRGB(point.age);
         data[idx + 0] = rgb[0];
         data[idx + 1] = rgb[1];
@@ -171,6 +170,6 @@ class MandelbrotSetModel {
 
   // update live list
   compact() {
-    this.live = this.live.filter(p => p.in_mbs === null);
+    this.live = this.live.filter(point => point.inMBS === null);
   }
 }
