@@ -1,0 +1,11 @@
+Resizing flashes to black until repaint
+
+Features:
+url anchoring to center and resolution
+zoom window for mouse
+touch zooming, double tap unzoom
+reset button
+convergeance trace on mouse over and selected pixel
+info overlay
+github releases mechanism for continous deployment
+
