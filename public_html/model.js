@@ -83,21 +83,30 @@ class MandelbrotSetModel {
 
   // initiate point structures
   initiate() {
-    this.points = [];
-    this.live = this.points;
-
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
-        this.points.push({
+    const z0 = math.complex(0, 0);
+    const {width, height} = this;
+    const points = [];
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        points.push({
           x: x,
           y: y,
-          c: this.coordinatesToValue(x, y),
-          z: math.complex(0, 0),
+          c: null,
+          z: z0,
           age: 0,
           in_mbs: null,
         });
       }
     }
+    
+    // set c values for the points with vectorisation
+    for (const point of points) {
+      point.c = this.coordinatesToValue(point.x, point.y)
+    }
+
+    this.points = points;
+    this.live = points;
   }
   
   // for the first iteration use known formula
@@ -105,7 +114,11 @@ class MandelbrotSetModel {
   iterate() {
     if (this.iteration == 0) {
       for (let point of this.live) {
-        if (mb_in_primary(point.c) || mb_in_secondary(point.c)) {
+        const c = point.c;
+
+        if(mb_escaped(c)) {
+          point.in_mbs = false;
+        } else if (mb_in_primary(c) || mb_in_secondary(c)) {
           point.in_mbs = true;
         }
       }

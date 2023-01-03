@@ -5,7 +5,7 @@ importScripts('https://unpkg.com/mathjs/lib/browser/math.js', 'utils.js', 'model
 var current_id = null;
 
 // minmum period between image posts
-const throttlePeriod = 100;
+const throttlePeriod = 200;
 
 // async iteration loop
 function loop(modelpack) {
@@ -48,6 +48,7 @@ function loop(modelpack) {
 // model specification
 onmessage = function (e) {
   current_id = null; // release existing loop
+  console.debug('setting up model in worker', e.data.id);
 
   // setup up the model
   const { id, center, resolution, width, height, max_iterations } = e.data;
@@ -56,14 +57,7 @@ onmessage = function (e) {
 
   // create image and initialise
   const image = new ImageData(model.width, model.height);
-  const data = image.data;
-
-  for (let i = 0; i < data.length; i += 4) {
-    data[i + 0] = 100;  // R value
-    data[i + 1] = 10;  // G value
-    data[i + 2] = 10;  // B value
-    data[i + 3] = 255;  // A value
-  }
+  image.data.fill(255);
 
   // collect model info for the worker loop
   const modelpack = {
@@ -73,10 +67,8 @@ onmessage = function (e) {
     last: null,
   }
 
-  // diagnostics
-  console.debug('running model in worker', modelpack.id);
-
   // run iteration loop
+  console.debug('running model in worker', modelpack.id);
   current_id = id;
   loop(modelpack);
 }

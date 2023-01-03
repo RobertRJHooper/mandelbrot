@@ -135,9 +135,11 @@ class ModelCanvas extends React.Component {
     // delay start of the model until renders have settled
     // this means resizing the window etc doesn't generate alot of
     // model initialisations and then cancels
+    // if there is not model yet then there is no delay applied for initial speed
     runModelDelayed() {
+        const delay = this.modelpack ? ModelCanvas.runModelDelay : 0;
         clearTimeout(this.runModelTimeout);
-        this.runModelTimeout = setTimeout(this.runModel.bind(this), ModelCanvas.runModelDelay);
+        this.runModelTimeout = setTimeout(this.runModel.bind(this), delay);
     }
 
     // loop that draws a new image if one is available
@@ -154,7 +156,7 @@ class ModelCanvas extends React.Component {
         modelpack.image = null;
 
         if (image) {
-            const context = this.canvas.current.getContext('2d');
+            const context = this.canvas.current.getContext('2d', {alpha: false});
             context.putImageData(image, 0, 0);
         }
 
