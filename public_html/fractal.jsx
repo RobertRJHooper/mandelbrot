@@ -35,7 +35,6 @@ class MandelbrotSet extends React.Component {
 
     startModel() {
         const { center, resolution, maxIterations, width, height } = this.props;
-        const canvas = this.canvas.current;
 
         // bail if it's a trivial canvas
         if (width < 1 || height < 1) {

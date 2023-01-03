@@ -1,16 +1,16 @@
 "use strict";
 
 function mbIterate(z, c) {
-  let zr = z.re;
-  let zi = z.im;
-  let r = zr * zr - zi * zi + c.re;
-  let i = 2 * zr * zi + c.im;
+  const zr = z.re;
+  const zi = z.im;
+  const r = zr * zr - zi * zi + c.re;
+  const i = 2 * zr * zi + c.im;
   return math.complex(r, i);
 }
 
 function mbEscaped(z) {
-  let zr = z.re;
-  let zi = z.im;
+  const zr = z.re;
+  const zi = z.im;
   return zr * zr + zi * zi > 4;
 }
 
@@ -25,19 +25,19 @@ function mbInPrimary(c) {
   }
 
   // full calculation
-  let z = math.add(math.sqrt(math.add(math.multiply(c, -4), 1)), -1);
+  const z = math.add(math.sqrt(math.add(math.multiply(c, -4), 1)), -1);
   return math.abs(z) < 0.999;
 }
 
 // is the point in the secondary circle when zn has period two in limit?
 function mbInSecondary(c) {
-  let zr = c.re + 1;
-  let zi = c.im;
+  const zr = c.re + 1;
+  const zi = c.im;
   return zr * zr + zi * zi < 1 / 16;
 }
 
 function ageToRGB(age) {
-  let hue = math.mod(age / 30 + 0.61, 1);
+  const hue = math.mod(age / 30 + 0.61, 1);
   return hslToRgb(hue, 0.9, 0.5);
 }
 
@@ -113,7 +113,7 @@ class MandelbrotSetModel {
   // then iterate points using the iteration function
   iterate() {
     if (this.iteration == 0) {
-      for (let point of this.live) {
+      for (const point of this.live) {
         const c = point.c;
 
         if(mbEscaped(c)) {
@@ -125,7 +125,7 @@ class MandelbrotSetModel {
     }
 
     if (this.iteration > 0) {
-      for (let point of this.live) {
+      for (const point of this.live) {
         if (point.inMBS !== null) {
           continue; // already determined
         }
@@ -152,7 +152,7 @@ class MandelbrotSetModel {
     const data = image.data;
     const width = this.width;
     
-    for (let point of this.live) {
+    for (const point of this.live) {
       const idx = (point.y * width + point.x) * 4;
 
       if(point.inMBS === false) {
