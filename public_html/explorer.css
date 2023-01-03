@@ -12,6 +12,7 @@ body {
     display: flex;
     height: 100vh;
     z-index: -2;
+    filter: blur(0.7px);
 }
 
 #overlayCanvas {
