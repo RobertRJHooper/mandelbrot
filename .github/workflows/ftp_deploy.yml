@@ -22,7 +22,7 @@ jobs:
       - name: 🔑 Load Secrets
         run: echo "machine ${{ secrets.FTP_HOSTNAME }} login ${{ secrets.FTP_USERNAME }} password ${{ secrets.FTP_PASSWORD }}" > ~/.netrc
       - name: 📁 Clear Target Folder
-        run: lftp -e "mrm −r *" ${{ secrets.FTP_HOSTNAME }}
+        run: lftp -e "mrm *" ${{ secrets.FTP_HOSTNAME }}
       - name: 📁 Upload Folder
         run: lftp -e "mirror --parallel=100 -R public_html /" ${{ secrets.FTP_HOSTNAME }}
 
