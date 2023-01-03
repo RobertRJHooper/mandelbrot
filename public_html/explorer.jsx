@@ -2,7 +2,7 @@
 
 class ModelCanvas extends React.Component {
     static defaultProps = {
-        center: "-0.75 + 0i",
+        center: "-0.5 + 0i",
         resolution: 'auto',
         max_iterations: 1000,
     }
@@ -98,8 +98,8 @@ class ModelCanvas extends React.Component {
 
         if (resolution == "auto") {
             // pick resolution to fit the full mandelbrot set in
-            const rx = 3 / height;
-            const ry = 3.5 / width;
+            const rx = 3.2 / height;
+            const ry = 4.0 / width;
             resolution_ = Math.max(rx, ry);
         } else {
             resolution_ = resolution;
