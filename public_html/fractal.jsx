@@ -28,7 +28,7 @@ class MandelbrotSet extends React.Component {
                 ref={this.canvas}
                 width={this.props.width}
                 height={this.props.height}
-                style={{objectFit: "cover", width: "100%", height: "100%"}}>
+                className="mandelbrotset">
             </canvas>
         );
     }
@@ -109,7 +109,7 @@ class MandelbrotSet extends React.Component {
             || this.props.maxIterations != prevProps.maxIterations
             || this.props.width != prevProps.width
             || this.props.height != prevProps.height) {
-                this.startModel();
+            this.startModel();
         } else if (this.state.iteration != prevState.iteration) {
             const image = this.state.image;
 
@@ -125,5 +125,69 @@ class MandelbrotSet extends React.Component {
     }
 }
 
+class MandelbrotSample extends React.Component {
+    static defaultProps = {
+        viewBox: "-2 -2 4 4",
+        z: "0.5 + 0.2i",
+        maxIterations: 100,
+    }
+
+    constructor(props) {
+        super(props);
+    }
+
+    render() {
+        const { z, maxIterations } = this.props;
+
+        // get iteration of points
+        // should be quick enough to be in here in render
+        const sample = mbSample(math.complex(z), maxIterations);
+        const points = sample.zn.map(zi => `${zi.re},${zi.im}`).join(' ');
+
+        return (
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="mandelbrotsample"
+                viewBox={this.props.viewBox}>
+                <defs>
+                    <marker
+                        id="mandelbrotsample-marker-start"
+                        className="mandelbrotsample-marker-start"
+                        viewBox="-5 -5 10 10"
+                        markerWidth="4"
+                        markerHeight="4">
+                        <circle r="5" />
+                    </marker>
+                    <marker
+                        id="mandelbrotsample-marker"
+                        className="mandelbrotsample-marker"
+                        viewBox="-5 -5 10 10"
+                        markerWidth="4"
+                        markerHeight="4">
+                        <circle r="5" />
+                    </marker>
+                </defs>
+                <polyline
+                    points={points}
+                    fill="none"
+                    markerStart="url(#mandelbrotsample-marker-start)"
+                    markerMid="url(#mandelbrotsample-marker)"
+                    markerEnd="url(#mandelbrotsample-marker)" />
+            </svg>
+        );
+    }
+
+    componentDidMount() {
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+    }
+
+    componentWillUnmount() {
+    }
+}
+
+
 const root = ReactDOM.createRoot(document.getElementById('mbs'));
-root.render(<MandelbrotSet />);
+//root.render(<MandelbrotSet />);
+root.render(<MandelbrotSample />);

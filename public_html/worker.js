@@ -2,7 +2,7 @@
 importScripts('https://unpkg.com/mathjs/lib/browser/math.js', 'utils.js', 'model.js');
 
 // id of the current model running
-var currentmodelID = null;
+var currentModelID = null;
 
 // minmum period between image posts
 const throttlePeriod = 200;
@@ -12,7 +12,7 @@ function loop(modelpack) {
   new Promise((resolve, reject) => {
     const { modelID, model, image, last } = modelpack;
 
-    if (modelID != currentmodelID) {
+    if (modelID != currentModelID) {
       reject(new Error('modelpack expired'));
       return;
     }
@@ -20,7 +20,7 @@ function loop(modelpack) {
     // if iterations are complete - post the final image and escape
     if (model.iteration >= model.max_iterations) {
       postMessage({ modelID: modelID, iteration: model.iteration, image: image });
-      reject(new Error('max_iterations reached'));
+      reject(new Error('max iterations reached'));
       return;
     }
 
@@ -51,7 +51,7 @@ onmessage = function (e) {
   console.debug('setting up model in worker', modelID);
   
   // release existing loop
-  currentmodelID = null; 
+  currentModelID = null; 
   
   // setup up the model
   const model = new MandelbrotSetModel(center, resolution, width, height, maxIterations)
@@ -71,6 +71,6 @@ onmessage = function (e) {
 
   // run iteration loop
   console.debug('running model in worker', modelID);
-  currentmodelID = modelID;
+  currentModelID = modelID;
   loop(modelpack);
 }

@@ -36,6 +36,32 @@ function mbInSecondary(c) {
   return zr * zr + zi * zi < 1 / 16;
 }
 
+// give the complex numbers of a particular point to escape
+function mbSample(c, maxIterations = 100) {
+  const zn = [];
+  let z = c;
+  let escapeAge = null;
+
+  for (let i = 0; i < maxIterations; i++) {
+    zn.push(z);
+
+    if (escapeAge === null && mbEscaped(z)) {
+      escapeAge = i;
+
+      // include one iteration after escape
+      maxIterations = i + 2;
+    }
+
+    z = mbIterate(z, c);
+  }
+
+  return {
+    c: c,
+    zn: zn,
+    escapeAge: escapeAge,
+  }
+}
+
 function ageToRGB(age) {
   const hue = math.mod(age / 30 + 0.61, 1);
   return hslToRgb(hue, 0.9, 0.5);
@@ -81,12 +107,11 @@ class MandelbrotSetModel {
     };
   }
 
-  // initiate point structures
   initiate() {
     const z0 = math.complex(0, 0);
-    const {width, height} = this;
+    const { width, height } = this;
     const points = [];
-    
+
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         points.push({
@@ -99,7 +124,7 @@ class MandelbrotSetModel {
         });
       }
     }
-    
+
     // set c values for the points with vectorisation
     for (const point of points) {
       point.c = this.coordinatesToValue(point.x, point.y)
@@ -108,7 +133,7 @@ class MandelbrotSetModel {
     this.points = points;
     this.live = points;
   }
-  
+
   // for the first iteration use known formula
   // then iterate points using the iteration function
   iterate() {
@@ -116,7 +141,7 @@ class MandelbrotSetModel {
       for (const point of this.live) {
         const c = point.c;
 
-        if(mbEscaped(c)) {
+        if (mbEscaped(c)) {
           point.inMBS = false;
         } else if (mbInPrimary(c) || mbInSecondary(c)) {
           point.inMBS = true;
@@ -151,11 +176,11 @@ class MandelbrotSetModel {
   paint(image) {
     const data = image.data;
     const width = this.width;
-    
+
     for (const point of this.live) {
       const idx = (point.y * width + point.x) * 4;
 
-      if(point.inMBS === false) {
+      if (point.inMBS === false) {
         const rgb = ageToRGB(point.age);
         data[idx + 0] = rgb[0];
         data[idx + 1] = rgb[1];
