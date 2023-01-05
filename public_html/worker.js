@@ -69,10 +69,10 @@ function loop(modelPack) {
     let skip = false;
 
     if (frameCount >= frameLimit) {
-      console.debug("skipping frame issue because the frame request limit is reached");
+      // console.debug("skipping frame issue because the frame request limit is reached");
       skip = true;
     } else if (lastImageSendTime && (now < lastImageSendTime + sendThrottlePeriod)) {
-      console.debug("skipping frame issue because of frequency throttling");
+      // console.debug("skipping frame issue because of frequency throttling");
       skip = true;
     }
 
@@ -107,7 +107,7 @@ function updateFrameLimit(modelID, frameLimit) {
     return;
   }
 
-  console.debug('setting model frame limit', frameLimit);
+  // console.debug('setting model frame limit', frameLimit);
   modelPack.frameLimit = frameLimit;
 }
 

@@ -12,16 +12,16 @@ body {
 .mandelbrotset {
     width: 100%;
     height: 100%;
-    /* object-fit: cover; */ 
-    
+    /* object-fit: cover; */
+
     filter: blur(0.7px);
 }
 
 .mandelbrotsample {
     width: 100%;
     height: 100%;
-    /* object-fit: cover; */ 
-    
+    /* object-fit: cover; */
+
     stroke: rgb(0, 158, 97);
     stroke-width: 0.2%;
     stroke-linecap: round;
@@ -30,6 +30,28 @@ body {
 .selector {
     width: 100%;
     height: 100%;
+}
+
+.selector-box {
+    position: absolute;
+
+    /* transparent */
+    background-color: rgba(0, 0, 0, 0);
+
+    border-color: rgb(181, 10, 224);
+    border-style: inset;
+    border-width: medium;
+    border-radius: 1px;
+
+    animation-name: blinking;
+    animation-duration: 1s;
+    animation-iteration-count: 32;
+}
+
+@keyframes blinking {
+    50% {
+        border-color: #ffcd5f;
+    }
 }
 
 .mandelbrotsample-marker {

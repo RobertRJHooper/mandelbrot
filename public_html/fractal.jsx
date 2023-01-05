@@ -1,5 +1,6 @@
 "use strict";
 
+// todo: memoized this for speed
 function parseViewBox(s) {
     return s.split(/\s+,?\s*/).map(x => Number.parseFloat(x));
 }
@@ -13,32 +14,48 @@ class App extends React.Component {
 
         this.state = {
             viewBox: "-2 -2 4 4",
-            cursorZ: "10",
+            traceZ: null,
         }
 
-        this.selectionCallback = this.selectionCallback.bind(this);
+        this.onBoxSelection = this.onBoxSelection.bind(this);
+        this.onPointHover = this.onPointHover.bind(this);
     }
 
     render() {
-        const viewBox = this.props.viewBox;
+        const viewBox = this.state.viewBox;
+        const traceZ = this.state.traceZ;
+        const showTrace = traceZ !== null;
 
         return (
             <div>
                 <div className="app-layer" style={{ zIndex: -2 }}>
                     <MandelbrotSet viewBox={viewBox} />
                 </div>
-                <div className="app-layer" style={{ zIndex: -1 }}>
-                    <MandelbrotSample viewBox={viewBox} z={this.state.cursorZ} />
+                <div className="app-layer" style={{ zIndex: -1, visibility: (showTrace ? "visible" : "hidden") }}>
+                    <MandelbrotSample viewBox={viewBox} z={traceZ} />
                 </div>
                 <div className="app-layer" style={{ zIndex: 0 }}>
-                    <Selector viewBox={viewBox} callback={this.selectionCallback} />
+                    <Selector viewBox={viewBox} onPointHover={this.onPointHover} onBoxSelection={this.onBoxSelection} />
                 </div>
             </div>
         );
     }
 
-    selectionCallback(selection) {
-        this.setState({ cursorZ: math.complex(selection.cursorX, selection.cursorY) });
+    onBoxSelection(box) {
+        console.log("sub box selected", box);
+        const viewBox = [box.left, box.top - box.height, box.width, box.height].map((x) => x.toString()).join(' ');
+
+        if (viewBox != this.state.viewBox) {
+            this.setState({ viewBox: viewBox });
+        }
+    }
+
+    onPointHover(point) {
+        const traceZ = point && math.complex(point.x, point.y);
+
+        if(this.state.traceZ != traceZ) {
+            this.setState({ traceZ: traceZ });
+        }
     }
 }
 
@@ -236,74 +253,166 @@ class MandelbrotSample extends React.Component {
 class Selector extends React.Component {
     static defaultProps = {
         viewBox: "-2 -2 4 4",
-        callback: null,
-        disabled: true,
+        onBoxSelection: null,
+        onPointHover: null,
     }
 
     constructor(props) {
         super(props);
 
         this.state = {
-            cursorX: 0,
-            cursorY: 0,
-            selecting: false,
-
-            boxTop: 0,
-            boxLeft: 0,
-            width: 0,
-            height: 0,
+            clickedPoint: null,
+            currentPoint: null,
         }
 
         this.div = React.createRef();
         this.onMouseMove = this.onMouseMove.bind(this);
+        this.onMouseDown = this.onMouseDown.bind(this);
+        this.onMouseUp = this.onMouseUp.bind(this);
     }
 
-    render() {
-        return (
-            <div ref={this.div} className="selector" onMouseMove={this.onMouseMove}>
-                <div>
 
+
+    render() {
+        const { clickedPoint, currentPoint } = this.state;
+        const box = this.boxGeometry(clickedPoint, currentPoint);
+        const boxStyle = box ? { ...box, visibility: "visible" } : { visibility: "hidden" };
+
+        return (
+            <div ref={this.div} className="selector" onMouseDown={this.onMouseDown}>
+                <div className="selector-box" style={boxStyle}>
                 </div>
             </div>
         );
     }
 
     componentDidMount() {
+        window.addEventListener("mousemove", this.onMouseMove);
+        window.addEventListener("mouseup", this.onMouseUp);
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const ps = prevState;
-        const cs = this.state;
-
-        if (ps.cursorX != cs.cursorX || ps.cursorY != cs.cursorY) {
-            this.props.callback && this.props.callback({ ...this.state });
-        }
     }
 
     componentWillUnmount() {
+        window.removeEventListener("mousemove", this.onMouseMove);
+        window.removeEventListener("mouseup", this.onMouseUp);
     }
 
-    // covert client coordinates to viewbox
-    clientToViewBox(x, y) {
-        const r = this.div.current.getBoundingClientRect();
-
-        if (!r.width || !r.height) {
+    boxGeometry(clickedPoint, currentPoint) {
+        if (!clickedPoint || !currentPoint) {
             return;
         }
 
-        const fx = (x - r.left) / r.width;
-        const fy = (r.bottom - y) / r.height;
-        const [left, bottom, width, height] = parseViewBox(this.props.viewBox);
-        return { x: left + width * fx, y: bottom + height * fy };
+        // determine box rectangle
+        const rect = {
+            left: clickedPoint.x,
+            top: clickedPoint.y,
+            width: currentPoint.x - clickedPoint.x,
+            height: currentPoint.y - clickedPoint.y,
+        }
+
+        // zero size
+        if (rect.width == 0 || rect.height == 0) {
+            return;
+        }
+
+        // inside out
+        if (rect.width < 0) {
+            rect.left = rect.left + rect.width;
+            rect.width = -1 * rect.width;
+        }
+        if (rect.height < 0) {
+            rect.top = rect.top + rect.height;
+            rect.height = -1 * rect.height;
+        }
+
+        return rect;
     }
 
-    // update state with view box mouse coordinates
-    onMouseMove(e) {
-        const point = this.clientToViewBox(e.clientX, e.clientY);
+    clientToFrameCoorindates(p) {
+        const divRect = this.div.current.getBoundingClientRect();
+        return { x: p.x - divRect.left, y: p.y - divRect.top };
+    }
 
-        if (point) {
-            this.setState({ cursorX: point.x, cursorY: point.y });
+    // coordinate system transformation from the div frame to viewBox
+    frameToViewBox(r) {
+        const divRect = this.div.current.getBoundingClientRect();
+        const [viewBoxLeft, viewBoxBottom, viewBoxWidth, viewBoxHeight] = parseViewBox(this.props.viewBox);
+
+        if (!divRect.width || !divRect.height) {
+            return;
         }
+
+        const fx = viewBoxWidth / divRect.width;
+        const fy = viewBoxHeight / divRect.height;
+
+        // construct results
+        const out = {}
+
+        if (r.x !== undefined) { out.x = viewBoxLeft + r.x * fx; }
+        if (r.left !== undefined) { out.left = viewBoxLeft + r.left * fx; }
+        if (r.right !== undefined) { out.right = viewBoxLeft + r.right * fx; }
+        if (r.top !== undefined) { out.top = viewBoxBottom + viewBoxHeight - r.top * fy; }
+        if (r.bottom !== undefined) { out.top = viewBoxBottom + viewBoxHeight - r.bottom * fy; }
+        if (r.y !== undefined) { out.y = viewBoxBottom + viewBoxHeight - r.y * fy; }
+        if (r.width !== undefined) { out.width = r.width * fx }
+        if (r.height !== undefined) { out.height = r.height * fy }
+
+        return out;
+    }
+
+    // registered to whole window
+    onMouseMove(e) {
+        const div = this.div.current;
+        const onPointHover = this.props.onPointHover;
+        const { currentPoint, clickedPoint } = this.state;
+
+        if (!div) {
+            return;
+        }
+
+        // clip position to the app frame
+        const clientX = Math.min(Math.max(div.clientLeft, e.clientX), div.clientLeft + div.clientWidth);
+        const clientY = Math.min(Math.max(div.clientTop, e.clientY), div.clientTop + div.clientHeight);
+        const clipped = clientX != e.clientX || clientY != e.clientY;
+
+        // convert to app frame coordinates
+        const newCurrentPoint = this.clientToFrameCoorindates({ x: clientX, y: clientY });
+        const pointMoved = !currentPoint || (newCurrentPoint.x != currentPoint.x) || (newCurrentPoint.y != currentPoint.y);
+
+        // report new state to this component
+        if (pointMoved) {
+            this.setState({ currentPoint: newCurrentPoint });
+        }
+
+        // callback to parent
+        if (onPointHover && !clickedPoint && !clipped) {
+            onPointHover(this.frameToViewBox(newCurrentPoint));
+        } else {
+            onPointHover(null);
+        }
+    }
+
+    // registered only to the <div> element
+    onMouseDown(e) {
+        const onPointHover = this.props.onPointHover;
+        onPointHover && onPointHover(null);
+        this.setState({ clickedPoint: this.clientToFrameCoorindates({ x: e.clientX, y: e.clientY }) });
+    }
+
+    // registered to whole window
+    onMouseUp(e) {
+        const { currentPoint, clickedPoint } = this.state;
+        const onBoxSelection = this.props.onBoxSelection;
+
+        if (onBoxSelection && clickedPoint && currentPoint) {
+            const boxGeometry = this.boxGeometry(clickedPoint, currentPoint);
+            onBoxSelection(this.frameToViewBox(boxGeometry));
+        }
+
+        // clear clicked state
+        this.setState({ clickedPoint: null });
     }
 
 }

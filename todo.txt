@@ -1,11 +1,16 @@
-Resizing flashes to black until repaint
-
-Features:
-url anchoring to center and resolution
+Features to make:
 zoom window for mouse
-touch zooming, double tap unzoom
-reset button
-convergeance trace on mouse over and selected pixel
+reset button, toggle trace button, recalculate button
 info overlay
-github releases mechanism for continous deployment
 
+maybes:
+spash screen until first frame
+url anchoring to center and resolution
+touch zooming, double tap unzoom
+trace stick on click
+github releases mechanism for continous deployment
+use memoization to improve performance of viewBox parsing
+high precision numbers
+
+done:
+convergeance trace on mouse over
