@@ -1,8 +1,8 @@
 "use strict";
 
-// todo: memoized this for speed
+// todo: memoize this for speed
 function parseViewBox(s) {
-    return s.split(/\s+,?\s*/).map(x => Number.parseFloat(x));
+    return s.split(/\s*[\s,]\s*/).map(x => Number.parseFloat(x));
 }
 
 class App extends React.Component {

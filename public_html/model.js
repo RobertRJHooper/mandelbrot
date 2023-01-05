@@ -181,15 +181,20 @@ class MandelbrotSetModel {
     for (const point of this.live) {
       const idx = (point.y * width + point.x) * 4;
 
-      if (point.inMBS === false) {
+      if (point.inMBS === true) {
+        data[idx + 0] = 0;
+        data[idx + 1] = 0;
+        data[idx + 2] = 0;
+      } else if (point.inMBS === false) {
         const rgb = ageToRGB(point.age);
         data[idx + 0] = rgb[0];
         data[idx + 1] = rgb[1];
         data[idx + 2] = rgb[2];
-      } else {
-        data[idx + 0] = 0;
-        data[idx + 1] = 0;
-        data[idx + 2] = 0;
+      } else  {
+        const f = math.max(0, 255 - point.age);
+        data[idx + 0] = f;
+        data[idx + 1] = f;
+        data[idx + 2] = f;
       }
     }
   }
