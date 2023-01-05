@@ -1,76 +1,125 @@
 "use strict";
 importScripts('https://unpkg.com/mathjs/lib/browser/math.js', 'utils.js', 'model.js');
 
-// id of the current model running
-var currentModelID = null;
-
 // minmum period between image posts
-const throttlePeriod = 200;
+const sendThrottlePeriod = 200;
 
-// async iteration loop
-function loop(modelpack) {
-  new Promise((resolve, reject) => {
-    const { modelID, model, image, last } = modelpack;
+// info on current model running
+var currentModelPack = null;
 
-    if (modelID != currentModelID) {
-      reject(new Error('modelpack expired'));
-      return;
-    }
-    
-    // if iterations are complete - post the final image and escape
-    if (model.iteration >= model.max_iterations) {
-      postMessage({ modelID: modelID, iteration: model.iteration, image: image });
-      reject(new Error('max iterations reached'));
-      return;
-    }
+// initiate model from spec and set it running in a loop of iterations
+function init(spec) {
+  const { modelID, minIm, minRe, viewHeight, viewWidth, width, height, maxIterations, frameLimit } = spec;
+  console.log('running model in worker', modelID);
 
-    // update the model
-    model.iterate();
-    model.paint(image);
+  // release existing model loop and free resources
+  currentModelPack = null;
 
-    // post the image (with throttling)
-    const now = Date.now();
-    if (!last || (now - last) >= throttlePeriod) {
-      postMessage({ modelID: modelID, iteration: model.iteration, image: image });
-      modelpack.last = now;
-    }
-
-    // compact the model so iterations are quicker
-    model.compact();
-
-    // loop
-    setTimeout(() => loop(modelpack));
-  }).catch(error => {
-    console.log('worker exception', modelpack.modelID, error);
-  });
-};
-
-// model specification
-onmessage = function (e) {
-  const { modelID, center, resolution, width, height, maxIterations } = e.data;
-  console.debug('setting up model in worker', modelID);
-  
-  // release existing loop
-  currentModelID = null; 
-  
-  // setup up the model
-  const model = new MandelbrotSetModel(center, resolution, width, height, maxIterations)
+  // setup up the new model
+  const model = new MandelbrotSetModel(minIm, minRe, viewHeight, viewWidth, width, height, maxIterations)
   model.initiate();
 
-  // create image and initialise
-  const image = new ImageData(model.width, model.height);
+  // create image and initialise (alpha component mainly)
+  const image = new ImageData(width, height);
   image.data.fill(255);
 
   // collect model info for the worker loop
-  const modelpack = {
+  const modelPack = {
     modelID: modelID,
     model: model,
     image: image,
-    last: null,
+
+    // throttling information
+    frameCount: 0,
+    frameLimit: frameLimit,
+    lastImageSendTime: null,
   }
 
   // run iteration loop
-  console.debug('running model in worker', modelID);
-  currentModelID = modelID;
-  loop(modelpack);
+  console.debug('initiating model iteration loop in worker', modelID);
+  currentModelPack = modelPack;
+  loop(modelPack);
+}
+
+// async iteration loop
+function loop(modelPack) {
+  new Promise((resolve, reject) => {
+    const { modelID, model, image, frameCount, frameLimit, lastImageSendTime } = modelPack;
+    const currentModelID = currentModelPack.modelID;
+
+    if (modelID != currentModelID) {
+      console.log('model pack expired, exiting loop', modelID);
+      return;
+    }
+
+    if (model.iteration >= model.maxIterations) {
+      postMessage({ modelID: modelID, iteration: model.iteration, image: image, frameCount: frameCount, frameLimit: frameLimit });
+      console.log('max iterations reached, exiting loop', modelID);
+      return;
+    }
+
+    // update the model and paint updates to image
+    model.iterate();
+    model.paint(image);
+
+    // determine if a new frame is required at this time
+    // throttling is based on consumption by the main thread (frameLimit)
+    // and time elapsed (sendThrottlePeriod)
+    const now = Date.now();
+    let skip = false;
+
+    if (frameCount >= frameLimit) {
+      console.debug("skipping frame issue because the frame request limit is reached");
+      skip = true;
+    } else if (lastImageSendTime && (now < lastImageSendTime + sendThrottlePeriod)) {
+      console.debug("skipping frame issue because of frequency throttling");
+      skip = true;
+    }
+
+    // send image to master
+    if (!skip) {
+      const newFrameCount = frameCount + 1;
+      postMessage({ modelID: modelID, iteration: model.iteration, image: image, frameCount: newFrameCount, frameLimit: frameLimit });
+      modelPack.frameCount = newFrameCount;
+      modelPack.lastImageSendTime = now;
+    }
+
+    // compact the model so future iterations are quicker 
+    model.compact();
+
+    // loop
+    setTimeout(() => loop(modelPack));
+  }).catch(error => {
+    console.error('worker exception', modelPack.modelID, error);
+  });
+};
+
+function updateFrameLimit(modelID, frameLimit) {
+  const modelPack = currentModelPack;
+
+  if (modelPack.modelID != modelID) {
+    console.debug('orphan frame limit update', modelID);
+    return;
+  }
+
+  if (modelPack.frameLimit >= frameLimit) {
+    console.debug('frame limit update not increasing, ignoring', modelID);
+    return;
+  }
+
+  console.debug('setting model frame limit', frameLimit);
+  modelPack.frameLimit = frameLimit;
+}
+
+// incoming message handler
+onmessage = function (e) {
+  const command = e.data.command;
+
+  if (command == "init") {
+    init(e.data);
+  } else if (command == "frameLimit") {
+    updateFrameLimit(e.data.modelID, e.data.frameLimit);
+  } else {
+    console.error('unknown worker command received', command);
+  }
 }

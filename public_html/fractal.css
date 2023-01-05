@@ -3,39 +3,46 @@ body {
     padding: 0;
 }
 
+.app-layer {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+
 .mandelbrotset {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    /* object-fit: cover; */ 
+    
+    filter: blur(0.7px);
 }
 
 .mandelbrotsample {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    /* object-fit: cover; */ 
     
-    stroke: red;
-    stroke-opacity: 50%;
+    stroke: rgb(0, 158, 97);
     stroke-width: 0.2%;
     stroke-linecap: round;
 }
 
+.selector {
+    width: 100%;
+    height: 100%;
+}
+
 .mandelbrotsample-marker {
-    fill: red;
-    opacity: 50%;
+    fill: rgb(179, 255, 0);
 }
 
 .mandelbrotsample-marker-start {
-    fill: green;
-    opacity: 50%;
+    fill: rgb(0, 255, 0);
 }
 
-
-#mbs {
+#app {
     display: block;
     position: fixed;
-    height: 100vh;
     width: 100vw;
-    z-index: -2;
-    filter: blur(0.7px);
+    height: 100vh;
 }

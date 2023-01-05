@@ -56,7 +56,6 @@ function mbSample(c, maxIterations = 100) {
   }
 
   return {
-    c: c,
     zn: zn,
     escapeAge: escapeAge,
   }
@@ -68,9 +67,11 @@ function ageToRGB(age) {
 }
 
 class MandelbrotSetModel {
-  constructor(center, resolution, width, height, maxIterations) {
-    this.center = center;
-    this.resolution = resolution;
+  constructor(minIm, minRe, viewHeight, viewWidth, width, height, maxIterations) {
+    this.minIm = minIm;
+    this.minRe = minRe;
+    this.viewHeight = viewHeight;
+    this.viewWidth = viewWidth;
     this.width = width;
     this.height = height;
     this.maxIterations = maxIterations;
@@ -87,23 +88,23 @@ class MandelbrotSetModel {
 
   // helper to get the complex value of an (x, y) point in the grid
   coordinatesToValue(x, y) {
-    const dx = x - (this.width - 1) / 2;
-    const dy = (this.height - 1) / 2 - y;
+    const fx = (x + 0.5) / this.width;
+    const fy = (y + 0.5) / this.height;
 
     return math.complex({
-      re: this.center.re + this.resolution * dx,
-      im: this.center.im + this.resolution * dy,
+      re: this.minRe * (1 - fx) + (this.minRe + this.viewWidth) * fx,
+      im: this.minIm * fy + (this.minIm + this.viewHeight) * (1 - fy),
     });
   }
 
   // helper to get the (x, y) point in the grid from a complex point
   valueToCoordinates(z) {
-    const dx = (z.re - this.center.re) / this.resolution;
-    const dy = (z.im - this.center.im) / this.resolution;
+    const fx = (z.re - this.minRe) / this.viewWidth;
+    const fy = (z.im - this.minIm - this.viewHeight) / this.viewHeight;
 
     return {
-      x: math.round(dx + (this.width - 1) / 2),
-      y: math.round((this.height - 1) / 2 - dy),
+      x: math.round(fx * this.width - 0.5),
+      y: math.round(fy * this.height - 0.5),
     };
   }
 
