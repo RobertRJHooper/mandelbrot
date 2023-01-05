@@ -1,6 +1,4 @@
 Features to make:
-zoom window for mouse
-reset button, toggle trace button, recalculate button
 info overlay
 
 maybes:

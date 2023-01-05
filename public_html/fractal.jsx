@@ -6,6 +6,7 @@ function parseViewBox(s) {
 }
 
 class App extends React.Component {
+    static baseViewBox = "-2 -2 4 4"
     static defaultProps = {
     }
 
@@ -13,7 +14,8 @@ class App extends React.Component {
         super(props);
 
         this.state = {
-            viewBox: "-2 -2 4 4",
+            viewBox: App.baseViewBox,
+            traceToggle: true,
             traceZ: null,
         }
 
@@ -22,20 +24,25 @@ class App extends React.Component {
     }
 
     render() {
-        const viewBox = this.state.viewBox;
-        const traceZ = this.state.traceZ;
-        const showTrace = traceZ !== null;
+        const {viewBox, traceToggle, traceZ} = this.state;
+        const showTrace = traceToggle && traceZ !== null;
 
         return (
             <div>
-                <div className="app-layer" style={{ zIndex: -2 }}>
-                    <MandelbrotSet viewBox={viewBox} />
+                <div style={{ display: "block", zIndex: 1, position: "absolute", right: 0 }}>
+                    <Navbar
+                        traceToggle={traceToggle}
+                        onTraceToggle={() => this.setState((state, props) => ({ traceToggle: !state.traceToggle }))}
+                        onResetClick={() => this.setState({ viewBox: App.baseViewBox })} />
+                </div>
+                <div className="app-layer" style={{ zIndex: 0 }}>
+                    <Selector viewBox={viewBox} onPointHover={this.onPointHover} onBoxSelection={this.onBoxSelection} />
                 </div>
                 <div className="app-layer" style={{ zIndex: -1, visibility: (showTrace ? "visible" : "hidden") }}>
                     <MandelbrotSample viewBox={viewBox} z={traceZ} />
                 </div>
-                <div className="app-layer" style={{ zIndex: 0 }}>
-                    <Selector viewBox={viewBox} onPointHover={this.onPointHover} onBoxSelection={this.onBoxSelection} />
+                <div className="app-layer" style={{ zIndex: -2 }}>
+                    <MandelbrotSet viewBox={viewBox} />
                 </div>
             </div>
         );
@@ -53,10 +60,55 @@ class App extends React.Component {
     onPointHover(point) {
         const traceZ = point && math.complex(point.x, point.y);
 
-        if(this.state.traceZ != traceZ) {
+        if (this.state.traceZ != traceZ) {
             this.setState({ traceZ: traceZ });
         }
     }
+}
+
+class Navbar extends React.Component {
+    static defaultProps = {
+        traceToggle: true,
+        showInfoToggle: true,
+        iteration: null,
+        currentPoint: null,
+
+        onTraceToggle: null,
+        onResetClick: null,
+    }
+
+    constructor(props) {
+        super(props);
+
+        this.state = {
+            highlightResetButton: false,
+        }
+    }
+
+    render() {
+        return (
+            <ul className="navbar">
+                <li className={this.state.highlightResetButton ? "navbar-li navbar-li-active-on-hover" : "navbar-li"}
+                    onMouseDown={() => this.setState({ highlightResetButton: true })}
+                    onMouseUp={() => this.setState({ highlightResetButton: false })}
+                    onClick={this.props.onResetClick}>
+                    {/* house icon */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.707 1.5Z" />
+                        <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293l6-6Z" />
+                    </svg>
+                </li>
+                <li className={this.props.traceToggle ? "navbar-li navbar-li-active" : "navbar-li"}
+                    onClick={this.props.onTraceToggle}>
+                    {/* zigzag icon */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path fillRule="evenodd" d="M6 2a.5.5 0 0 1 .47.33L10 12.036l1.53-4.208A.5.5 0 0 1 12 7.5h3.5a.5.5 0 0 1 0 1h-3.15l-1.88 5.17a.5.5 0 0 1-.94 0L6 3.964 4.47 8.171A.5.5 0 0 1 4 8.5H.5a.5.5 0 0 1 0-1h3.15l1.88-5.17A.5.5 0 0 1 6 2Z" />
+                    </svg>
+                </li>
+            </ul>
+        );
+    }
+
 }
 
 class MandelbrotSet extends React.Component {
@@ -269,17 +321,18 @@ class Selector extends React.Component {
         this.onMouseMove = this.onMouseMove.bind(this);
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
+        this.onWindowMouseUp = this.onWindowMouseUp.bind(this);
     }
 
 
 
     render() {
         const { clickedPoint, currentPoint } = this.state;
-        const box = this.boxGeometry(clickedPoint, currentPoint);
+        const box = clickedPoint && currentPoint && this.boxGeometry(clickedPoint, currentPoint);
         const boxStyle = box ? { ...box, visibility: "visible" } : { visibility: "hidden" };
 
         return (
-            <div ref={this.div} className="selector" onMouseDown={this.onMouseDown}>
+            <div ref={this.div} className="selector" onMouseDown={this.onMouseDown} onMouseUp={this.onMouseUp}>
                 <div className="selector-box" style={boxStyle}>
                 </div>
             </div>
@@ -300,21 +353,11 @@ class Selector extends React.Component {
     }
 
     boxGeometry(clickedPoint, currentPoint) {
-        if (!clickedPoint || !currentPoint) {
-            return;
-        }
-
-        // determine box rectangle
         const rect = {
             left: clickedPoint.x,
             top: clickedPoint.y,
             width: currentPoint.x - clickedPoint.x,
             height: currentPoint.y - clickedPoint.y,
-        }
-
-        // zero size
-        if (rect.width == 0 || rect.height == 0) {
-            return;
         }
 
         // inside out
@@ -335,7 +378,6 @@ class Selector extends React.Component {
         return { x: p.x - divRect.left, y: p.y - divRect.top };
     }
 
-    // coordinate system transformation from the div frame to viewBox
     frameToViewBox(r) {
         const divRect = this.div.current.getBoundingClientRect();
         const [viewBoxLeft, viewBoxBottom, viewBoxWidth, viewBoxHeight] = parseViewBox(this.props.viewBox);
@@ -353,16 +395,15 @@ class Selector extends React.Component {
         if (r.x !== undefined) { out.x = viewBoxLeft + r.x * fx; }
         if (r.left !== undefined) { out.left = viewBoxLeft + r.left * fx; }
         if (r.right !== undefined) { out.right = viewBoxLeft + r.right * fx; }
+        if (r.y !== undefined) { out.y = viewBoxBottom + viewBoxHeight - r.y * fy; }
         if (r.top !== undefined) { out.top = viewBoxBottom + viewBoxHeight - r.top * fy; }
         if (r.bottom !== undefined) { out.top = viewBoxBottom + viewBoxHeight - r.bottom * fy; }
-        if (r.y !== undefined) { out.y = viewBoxBottom + viewBoxHeight - r.y * fy; }
         if (r.width !== undefined) { out.width = r.width * fx }
         if (r.height !== undefined) { out.height = r.height * fy }
 
         return out;
     }
 
-    // registered to whole window
     onMouseMove(e) {
         const div = this.div.current;
         const onPointHover = this.props.onPointHover;
@@ -394,25 +435,26 @@ class Selector extends React.Component {
         }
     }
 
-    // registered only to the <div> element
     onMouseDown(e) {
         const onPointHover = this.props.onPointHover;
         onPointHover && onPointHover(null);
         this.setState({ clickedPoint: this.clientToFrameCoorindates({ x: e.clientX, y: e.clientY }) });
     }
 
-    // registered to whole window
     onMouseUp(e) {
         const { currentPoint, clickedPoint } = this.state;
         const onBoxSelection = this.props.onBoxSelection;
 
         if (onBoxSelection && clickedPoint && currentPoint) {
-            const boxGeometry = this.boxGeometry(clickedPoint, currentPoint);
-            onBoxSelection(this.frameToViewBox(boxGeometry));
+            const bg = this.boxGeometry(clickedPoint, currentPoint);
+            bg.width && bg.height && onBoxSelection(this.frameToViewBox(bg));
         }
 
-        // clear clicked state
         this.setState({ clickedPoint: null });
+    }
+
+    onWindowMouseUp(e) {
+
     }
 
 }
