@@ -2,21 +2,21 @@
 importScripts('https://unpkg.com/mathjs/lib/browser/math.js', 'utils.js', 'model.js');
 
 // minmum period between image posts
-const sendThrottlePeriod = 200;
+const issueThrottlePeriod = 200;
 
 // info on current model running
 var currentModelPack = null;
 
 // initiate model from spec and set it running in a loop of iterations
 function init(spec) {
-  const { modelID, minIm, minRe, viewHeight, viewWidth, width, height, maxIterations, frameLimit } = spec;
+  const { modelID, viewTopLeft, viewWidth, viewHeight, width, height, maxIterations, frameLimit } = spec;
   console.log('running model in worker', modelID);
 
   // release existing model loop and free resources
   currentModelPack = null;
 
   // setup up the new model
-  const model = new MandelbrotSetModel(minIm, minRe, viewHeight, viewWidth, width, height, maxIterations)
+  const model = new MandelbrotSetModel(viewTopLeft, viewWidth, viewHeight, width, height, maxIterations)
   model.initiate();
 
   // create image and initialise (alpha component mainly)
@@ -44,7 +44,7 @@ function init(spec) {
 // async iteration loop
 function loop(modelPack) {
   new Promise((resolve, reject) => {
-    const { modelID, model, image, frameCount, frameLimit, lastImageSendTime } = modelPack;
+    const { modelID, model, image, frameCount, frameLimit, lastIssueTime } = modelPack;
     const currentModelID = currentModelPack.modelID;
 
     if (modelID != currentModelID) {
@@ -66,31 +66,41 @@ function loop(modelPack) {
     // throttling is based on consumption by the main thread (frameLimit)
     // and time elapsed (sendThrottlePeriod)
     const now = Date.now();
-    let skip = false;
+    const throttle = lastIssueTime && (now < lastIssueTime + issueThrottlePeriod);
+    const issueFrame = (frameCount < frameLimit) && !throttle;
 
-    if (frameCount >= frameLimit) {
-      // console.debug("skipping frame issue because the frame request limit is reached");
-      skip = true;
-    } else if (lastImageSendTime && (now < lastImageSendTime + sendThrottlePeriod)) {
-      // console.debug("skipping frame issue because of frequency throttling");
-      skip = true;
+    // generate bitmap asyncronously and issue
+    if (issueFrame) {
+      modelPack.lastIssueTime = now;
+      resolve(createImageBitmap(image).then((bitmap) => [bitmap, modelPack]));
+    } else {
+      resolve([null, modelPack]);
     }
+  }).then(([bitmap, modelPack]) => {
+    const { modelID, model, frameCount, frameLimit } = modelPack;
 
-    // send image to master
-    if (!skip) {
+    if (bitmap) {
       const newFrameCount = frameCount + 1;
-      postMessage({ modelID: modelID, iteration: model.iteration, image: image, frameCount: newFrameCount, frameLimit: frameLimit });
       modelPack.frameCount = newFrameCount;
-      modelPack.lastImageSendTime = now;
+
+      postMessage({
+        modelID: modelID,
+        iteration: model.iteration,
+        bitmap: bitmap,
+        frameCount: newFrameCount,
+        frameLimit: frameLimit,
+      }, [bitmap]);
     }
 
-    // compact the model so future iterations are quicker 
-    model.compact();
+    // compact the model so future iterations are quicker
+    if (model.iteration % 5 == 1) {
+      model.compact();
+    }
 
     // loop
     setTimeout(() => loop(modelPack));
   }).catch(error => {
-    console.error('worker exception', modelPack.modelID, error);
+    console.error('worker exception', error);
   });
 };
 
