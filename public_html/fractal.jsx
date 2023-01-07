@@ -78,6 +78,9 @@ class App extends React.Component {
 
         this.state = {
             viewBox: App.defaultViewBox,
+            gridWidth: 800,
+            gridHeight: 600,
+
             traceToggle: false,
             traceZ: 0,
         }
@@ -87,7 +90,7 @@ class App extends React.Component {
     }
 
     render() {
-        const { viewBox, traceToggle, traceZ } = this.state;
+        const { viewBox, gridWidth, gridHeight, traceToggle, traceZ } = this.state;
         const showTrace = traceToggle && traceZ !== null;
 
         return (
@@ -110,9 +113,7 @@ class App extends React.Component {
                         z={traceZ} />
                 </div>
                 <div className="app-layer" style={{ zIndex: -2 }}>
-                    <MandelbrotSet
-                        viewBox={viewBox}
-                        onStatusUpdate={(status) => this.setState(status)} />
+                    <MandelbrotSet viewBox={viewBox} gridWidth={gridWidth} gridHeight={gridHeight}/>
                 </div>
             </div>
         );
@@ -188,11 +189,10 @@ class Navbar extends React.Component {
 class MandelbrotSet extends React.Component {
     static defaultProps = {
         viewBox: "-2 -2 4 4",
-        width: 800,
-        height: 600,
+        gridWidth: 800,
+        gridHeight: 600,
         maxIterations: 1000,
         frameThrottle: 5,
-        onStatusUpdate: null,
     }
 
     constructor(props) {
@@ -200,8 +200,8 @@ class MandelbrotSet extends React.Component {
 
         this.state = {
             modelID: null,
-            iteration: null,
-            bitmap: null,
+            frameIndex: null,
+            frameBitmap: null,
         }
 
         this.canvas = React.createRef();
@@ -212,18 +212,18 @@ class MandelbrotSet extends React.Component {
         return (
             <canvas
                 ref={this.canvas}
-                width={this.props.width}
-                height={this.props.height}
+                width={this.props.gridWidth}
+                height={this.props.gridHeight}
                 className="mandelbrotset">
             </canvas>
         );
     }
 
     startModel() {
-        const { viewBox, width, height, maxIterations, frameThrottle } = this.props;
+        const { viewBox, gridWidth, gridHeight, maxIterations, frameThrottle } = this.props;
 
         // bail if it's a trivial canvas
-        if (width < 1 || height < 1) {
+        if (gridWidth < 1 || gridHeight < 1) {
             return;
         }
 
@@ -234,11 +234,11 @@ class MandelbrotSet extends React.Component {
         // parse viewbox
         const vb = parseViewBox(viewBox);
 
-        // save initial model state
+        // save initial model state details
         this.setState({
             modelID: modelID,
-            iteration: -1,
-            image: null,
+            frameIndex: null,
+            bitmap: null,
         });
 
         // start calculations on worker
@@ -248,21 +248,16 @@ class MandelbrotSet extends React.Component {
             viewTopLeft: math.complex(vb.left, vb.top),
             viewWidth: vb.width,
             viewHeight: vb.height,
-            width: width, // calculation grid dimensions
-            height: height,
+            gridWidth: gridWidth,
+            gridHeight: gridHeight,
             maxIterations: maxIterations,
             frameLimit: frameThrottle,
         });
     }
 
     workerMessage(message) {
-        const { modelID, iteration, bitmap, frameCount, frameLimit } = message.data;
+        const { modelID, frameBitmap, frameIndex } = message.data;
 
-        // status callback to parent
-        const { onStatusUpdate } = this.props;
-        onStatusUpdate && onStatusUpdate({ iteration: iteration });
-
-        // component state
         this.setState(function (state, props) {
             if (state.modelID != modelID) {
                 console.debug('orphan message from worker', modelID);
@@ -270,33 +265,21 @@ class MandelbrotSet extends React.Component {
             }
 
             // issue update to worker for frame limit
-            const newFrameLimit = frameCount + props.frameThrottle;
+            const newFrameLimit = frameIndex + props.frameThrottle;
             this.worker.postMessage({ command: 'frameLimit', modelID: modelID, frameLimit: newFrameLimit });
 
             // don't display out of sequence frames
-            if (state.iteration >= iteration) {
-                console.debug('late frame returned', modelID, iteration);
+            if (state.frameIndex >= frameIndex) {
+                console.debug('late frame returned', modelID, frameIndex);
                 return {};
             }
 
             // set state
             return {
-                iteration: iteration,
-                frameCount: frameCount,
-                bitmap: bitmap,
+                frameIndex: frameIndex,
+                frameBitmap: frameBitmap,
             };
         });
-    }
-
-    paintImage() {
-        const bitmap = this.state.bitmap;
-
-        if (!bitmap) {
-            return;
-        }
-
-        const context = this.canvas.current.getContext('2d', { alpha: false });
-        context.drawImage(bitmap, 0, 0);
     }
 
     componentDidMount() {
@@ -306,16 +289,21 @@ class MandelbrotSet extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const cp = this.props;
-        const pp = prevProps;
+        const { viewBox, gridWidth, gridHeight, maxIterations } = this.props;
 
-        if (cp.viewBox != pp.viewBox
-            || cp.width != pp.width
-            || cp.height != pp.height
-            || cp.maxIterations != pp.maxIterations) {
-            this.startModel();
-        } else if (this.state.iteration != prevState.iteration) {
-            this.paintImage();
+        const modelChanged = viewBox != prevProps.viewBox
+            || gridWidth != prevProps.gridWidth
+            || gridHeight != prevProps.gridHeight
+            || maxIterations != prevProps.maxIterations;
+        modelChanged && this.startModel();
+
+        // paint a new frame to the canvas
+        const { frameIndex, frameBitmap } = this.state;
+        const frameChanged = frameIndex != prevState.frameIndex;
+
+        if (!modelChanged && frameChanged && frameBitmap) {
+            const context = this.canvas.current.getContext('2d', { alpha: false });
+            context.drawImage(frameBitmap, 0, 0);
         }
     }
 
@@ -342,7 +330,7 @@ class MandelbrotSample extends React.Component {
         // should be quick enough to be in here in render
         const sample = mbSample(math.complex(z), maxIterations);
         const points = sample.zn.map(zi => `${zi.re},${zi.im}`).join(' ');
-
+        
         return (
             <svg
                 xmlns="http://www.w3.org/2000/svg"

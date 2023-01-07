@@ -67,13 +67,12 @@ function ageToRGB(age) {
 }
 
 class MandelbrotSetModel {
-  constructor(viewTopLeft, viewWidth, viewHeight, width, height, maxIterations) {
+  constructor(viewTopLeft, viewWidth, viewHeight, gridWidth, gridHeight) {
     this.viewTopLeft = viewTopLeft;
     this.viewWidth = viewWidth;
     this.viewHeight = viewHeight;
-    this.width = width;
-    this.height = height;
-    this.maxIterations = maxIterations;
+    this.gridWidth = gridWidth;
+    this.gridHeight = gridHeight;
 
     // number of iterations completed
     this.iteration = 0;
@@ -87,8 +86,8 @@ class MandelbrotSetModel {
 
   // helper to get the complex value of an (x, y) point in the grid
   gridToValue(x, y) {
-    const fx = (x + 0.5) / this.width;
-    const fy = (y + 0.5) / this.height;
+    const fx = (x + 0.5) / this.gridWidth;
+    const fy = (y + 0.5) / this.gridHeight;
 
     return math.complex(
       this.viewTopLeft.re + fx * this.viewWidth,
@@ -102,18 +101,18 @@ class MandelbrotSetModel {
     const fy = (this.viewTopLeft.im - z.im) / this.viewHeight;
 
     return {
-      x: math.round(fx * this.width - 0.5),
-      y: math.round(fy * this.height - 0.5),
+      x: math.round(fx * this.gridWidth - 0.5),
+      y: math.round(fy * this.gridHeight - 0.5),
     };
   }
 
   initiate() {
     const z0 = math.complex(0, 0);
-    const { width, height } = this;
+    const { gridWidth, gridHeight } = this;
     const points = [];
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
+    for (let y = 0; y < gridHeight; y++) {
+      for (let x = 0; x < gridWidth; x++) {
         points.push({
           x: x,
           y: y,
@@ -155,10 +154,6 @@ class MandelbrotSetModel {
           continue; // already determined
         }
 
-        if (point.age >= this.maxIterations) {
-          continue; // limit reached
-        }
-
         point.z = mbIterate(point.z, point.c);
         point.age += 1;
 
@@ -175,10 +170,10 @@ class MandelbrotSetModel {
   // The image must be painted before a compact
   paint(image) {
     const data = image.data;
-    const width = this.width;
+    const gridWidth = this.gridWidth;
 
     for (const point of this.live) {
-      const idx = (point.y * width + point.x) * 4;
+      const idx = (point.y * gridWidth + point.x) * 4;
 
       if (point.inMBS === null || point.inMBS == true) {
         data[idx + 0] = 0;
