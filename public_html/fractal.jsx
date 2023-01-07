@@ -78,7 +78,7 @@ class App extends React.Component {
 
         this.state = {
             viewBox: App.defaultViewBox,
-            traceToggle: true,
+            traceToggle: false,
             traceZ: 0,
         }
 
@@ -92,11 +92,6 @@ class App extends React.Component {
 
         return (
             <div>
-                <div className="app-info" style={{ zIndex: 1 }}>
-                    <InfoBar
-                        hoverZ={this.state.traceZ}
-                        iteration={this.state.iteration} />
-                </div>
                 <div className="app-nav" style={{ zIndex: 1 }}>
                     <Navbar
                         traceToggle={traceToggle}
@@ -140,38 +135,6 @@ class App extends React.Component {
         }
     }
 }
-class InfoBar extends React.Component {
-    static floatFormat = new Intl.NumberFormat(
-        "us-en",
-        {
-            signDisplay: 'always',
-            minimumFractionDigits: 15,
-            maximumFractionDigits: 15
-        }).format;
-
-    static defaultProps = {
-        hoverZ: math.complex(0, 0),
-        iteration: 0,
-    }
-
-    constructor(props) {
-        super(props);
-    }
-
-    render() {
-        return (
-            <div className="infobar">
-                <span>
-                    Iterations:
-                    {this.props.iteration}
-                    Hover point: z = 
-                    {InfoBar.floatFormat(math.complex(this.props.hoverZ).re)}
-                    {InfoBar.floatFormat(math.complex(this.props.hoverZ).im)}i
-                </span>
-            </div>
-        );
-    }
-}
 
 class Navbar extends React.Component {
     static defaultProps = {
@@ -187,17 +150,12 @@ class Navbar extends React.Component {
 
     constructor(props) {
         super(props);
-
-        this.state = {
-            highlightResetButton: false,
-        }
     }
 
     render() {
         return (
-
             <ul className="navbar">
-                <li className={this.state.highlightResetButton ? "navbar-li navbar-li-active-on-hover" : "navbar-li"}
+                <li className="navbar-li"
                     onMouseDown={() => this.setState({ highlightResetButton: true })}
                     onMouseUp={() => this.setState({ highlightResetButton: false })}
                     onClick={this.props.onResetClick}>
@@ -209,9 +167,9 @@ class Navbar extends React.Component {
                 </li>
                 <li className={this.props.traceToggle ? "navbar-li navbar-li-active" : "navbar-li"}
                     onClick={this.props.onTraceToggle}>
-                    {/* zigzag icon */}
+                    {/* cursor icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
-                        <path fillRule="evenodd" d="M6 2a.5.5 0 0 1 .47.33L10 12.036l1.53-4.208A.5.5 0 0 1 12 7.5h3.5a.5.5 0 0 1 0 1h-3.15l-1.88 5.17a.5.5 0 0 1-.94 0L6 3.964 4.47 8.171A.5.5 0 0 1 4 8.5H.5a.5.5 0 0 1 0-1h3.15l1.88-5.17A.5.5 0 0 1 6 2Z" />
+                        <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
                     </svg>
                 </li>
                 <li className="navbar-li">

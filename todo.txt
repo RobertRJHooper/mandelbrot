@@ -1,8 +1,10 @@
 Features to make:
 fix display then info bar blocking
+rename traceZ
+add splash screen with explanations
+add modal wikipedia page
 
 maybes:
-spash screen until first frame
 url anchoring to center and resolution
 touch zooming, double tap unzoom
 trace stick on click
