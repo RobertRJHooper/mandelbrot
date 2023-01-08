@@ -70,13 +70,14 @@ body {
     stroke-linecap: round;
 }
 
-.mandelbrotsample-marker {
-    fill: lightgray;
+.mandelbrotsample-marker-bounded {
+    fill: green;
 }
 
-.mandelbrotsample-marker-start {
-    fill: lightgray;
+.mandelbrotsample-marker-escaped {
+    fill: red;
 }
+
 
 .selector {
     width: 100%;

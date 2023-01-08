@@ -41,12 +41,20 @@ function mbSample(c, maxIterations = 100) {
   const zn = [];
   let z = c;
   let escapeAge = null;
+  let inMBS = null;
 
+  // check for known convergeance areas
+  if (mbInPrimary(c) || mbInSecondary(c)) {
+    inMBS = true;
+  }
+
+  // get runout of points
   for (let i = 0; i < maxIterations; i++) {
     zn.push(z);
 
     if (escapeAge === null && mbEscaped(z)) {
       escapeAge = i;
+      inMBS = false;
 
       // include one iteration after escape
       maxIterations = i + 2;
@@ -57,6 +65,7 @@ function mbSample(c, maxIterations = 100) {
 
   return {
     zn: zn,
+    inMBS: inMBS,
     escapeAge: escapeAge,
   }
 }

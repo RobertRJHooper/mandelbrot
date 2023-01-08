@@ -71,16 +71,13 @@ function clientToViewBox(clientRect, viewBox, values) {
 }
 
 class App extends React.Component {
-    static defaultViewBox = "-2 -2 4 4"
+    static defaultViewBox = "-2 -2 4 4";
 
     constructor(props) {
         super(props);
 
         this.state = {
             viewBox: App.defaultViewBox,
-            gridWidth: 800,
-            gridHeight: 600,
-
             traceToggle: false,
             traceZ: 0,
         }
@@ -113,7 +110,7 @@ class App extends React.Component {
                         z={traceZ} />
                 </div>
                 <div className="app-layer" style={{ zIndex: -2 }}>
-                    <MandelbrotSet viewBox={viewBox} gridWidth={gridWidth} gridHeight={gridHeight}/>
+                    <MandelbrotSet viewBox={viewBox} />
                 </div>
             </div>
         );
@@ -189,9 +186,6 @@ class Navbar extends React.Component {
 class MandelbrotSet extends React.Component {
     static defaultProps = {
         viewBox: "-2 -2 4 4",
-        gridWidth: 800,
-        gridHeight: 600,
-        maxIterations: 1000,
         frameThrottle: 5,
     }
 
@@ -210,26 +204,16 @@ class MandelbrotSet extends React.Component {
 
     render() {
         return (
-            <canvas
-                ref={this.canvas}
-                width={this.props.gridWidth}
-                height={this.props.gridHeight}
-                className="mandelbrotset">
-            </canvas>
+            <canvas ref={this.canvas} width="0" height="0" className="mandelbrotset"></canvas>
         );
     }
 
     startModel() {
-        const { viewBox, gridWidth, gridHeight, maxIterations, frameThrottle } = this.props;
-
-        // bail if it's a trivial canvas
-        if (gridWidth < 1 || gridHeight < 1) {
-            return;
-        }
+        const { viewBox, frameThrottle } = this.props;
 
         // create a unique model id
         const modelID = Date.now() + "" + Math.floor(Math.random() * 1000000);
-        console.log('starting model', modelID);
+        console.debug('starting model', modelID);
 
         // parse viewbox
         const vb = parseViewBox(viewBox);
@@ -248,9 +232,6 @@ class MandelbrotSet extends React.Component {
             viewTopLeft: math.complex(vb.left, vb.top),
             viewWidth: vb.width,
             viewHeight: vb.height,
-            gridWidth: gridWidth,
-            gridHeight: gridHeight,
-            maxIterations: maxIterations,
             frameLimit: frameThrottle,
         });
     }
@@ -263,10 +244,6 @@ class MandelbrotSet extends React.Component {
                 console.debug('orphan message from worker', modelID);
                 return {};
             }
-
-            // issue update to worker for frame limit
-            const newFrameLimit = frameIndex + props.frameThrottle;
-            this.worker.postMessage({ command: 'frameLimit', modelID: modelID, frameLimit: newFrameLimit });
 
             // don't display out of sequence frames
             if (state.frameIndex >= frameIndex) {
@@ -289,12 +266,7 @@ class MandelbrotSet extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { viewBox, gridWidth, gridHeight, maxIterations } = this.props;
-
-        const modelChanged = viewBox != prevProps.viewBox
-            || gridWidth != prevProps.gridWidth
-            || gridHeight != prevProps.gridHeight
-            || maxIterations != prevProps.maxIterations;
+        const modelChanged = this.props.viewBox != prevProps.viewBox;
         modelChanged && this.startModel();
 
         // paint a new frame to the canvas
@@ -302,8 +274,26 @@ class MandelbrotSet extends React.Component {
         const frameChanged = frameIndex != prevState.frameIndex;
 
         if (!modelChanged && frameChanged && frameBitmap) {
-            const context = this.canvas.current.getContext('2d', { alpha: false });
+            const canvas = this.canvas.current;
+
+            const frameWidth = frameBitmap.width;
+            const frameHeight = frameBitmap.height;
+            const canvasWidth = canvas.getAttribute("width");
+            const canvasHeight = canvas.getAttribute("width");
+
+            // check/update canvas dimensions
+            if (canvasWidth != frameWidth || canvasHeight != frameHeight) {
+                canvas.setAttribute("width", frameWidth);
+                canvas.setAttribute("height", frameHeight);
+            }
+
+            // paint bitmap to canvas
+            const context = canvas.getContext('2d', { alpha: false });
             context.drawImage(frameBitmap, 0, 0);
+
+            // issue update to worker to increase frame limit
+            const newFrameLimit = frameIndex + this.props.frameThrottle;
+            this.worker.postMessage({ command: 'frameLimit', modelID: this.state.modelID, frameLimit: newFrameLimit });
         }
     }
 
@@ -330,7 +320,8 @@ class MandelbrotSample extends React.Component {
         // should be quick enough to be in here in render
         const sample = mbSample(math.complex(z), maxIterations);
         const points = sample.zn.map(zi => `${zi.re},${zi.im}`).join(' ');
-        
+        const escaped = sample.inMBS === false; // allow undetermined as in the set
+
         return (
             <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -340,16 +331,8 @@ class MandelbrotSample extends React.Component {
                 preserveAspectRatio="none">
                 <defs>
                     <marker
-                        id="mandelbrotsample-marker-start"
-                        className="mandelbrotsample-marker-start"
-                        viewBox="-5 -5 10 10"
-                        markerWidth="4"
-                        markerHeight="4">
-                        <circle r="5" />
-                    </marker>
-                    <marker
                         id="mandelbrotsample-marker"
-                        className="mandelbrotsample-marker"
+                        className={escaped ? "mandelbrotsample-marker-escaped" : "mandelbrotsample-marker-bounded"}
                         viewBox="-5 -5 10 10"
                         markerWidth="4"
                         markerHeight="4">
@@ -359,7 +342,7 @@ class MandelbrotSample extends React.Component {
                 <polyline
                     points={points}
                     fill="none"
-                    markerStart="url(#mandelbrotsample-marker-start)"
+                    markerStart="url(#mandelbrotsample-marker)"
                     markerMid="url(#mandelbrotsample-marker)"
                     markerEnd="url(#mandelbrotsample-marker)" />
             </svg>

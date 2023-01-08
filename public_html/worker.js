@@ -8,8 +8,10 @@ const frameThrottlePeriod = 200;
 var currentModelPack = null;
 
 class ModelPack {
-  constructor(modelID, viewTopLeft, viewWidth, viewHeight, gridWidth, gridHeight, maxIterations, frameLimit) {
+  constructor(modelID, viewTopLeft, viewWidth, viewHeight, frameLimit) {
     this.modelID = modelID;
+
+    const gridHeight = 600, gridWidth = 800, maxIterations = 1000;
     this.model = new MandelbrotSetModel(viewTopLeft, viewWidth, viewHeight, gridWidth, gridHeight);
     this.model.initiate();
 
@@ -29,10 +31,10 @@ class ModelPack {
 
   loop() {
     new Promise((resolve, reject) => {
-      const {modelID, model, terminate, maxIterations, frameIndex, frameLimit, frameTime} = this;
+      const { modelID, model, terminate, maxIterations, frameIndex, frameLimit, frameTime } = this;
 
       if (terminate) {
-        return reject(`termination flag set for modelID ${modelID}`, );
+        return reject(`termination flag set for modelID ${modelID}`,);
       }
 
       if (model.iteration >= maxIterations) {
@@ -94,19 +96,20 @@ onmessage = function (e) {
 
   if (command == "init") {
     if (currentModelPack) {
+      console.log(`marking current model pack for termination ${currentModelPack.modelID}`);
       currentModelPack.terminate = true;
       currentModelPack = null;
     }
 
-    const {modelID, viewTopLeft, viewWidth, viewHeight, gridWidth, gridHeight, maxIterations, frameLimit} = e.data;
+    const { modelID, viewTopLeft, viewWidth, viewHeight, frameLimit } = e.data;
     console.log('running model in worker', modelID);
-    const modelPack = new ModelPack(modelID, viewTopLeft, viewWidth, viewHeight, gridWidth, gridHeight, maxIterations, frameLimit);
+    const modelPack = new ModelPack(modelID, viewTopLeft, viewWidth, viewHeight, frameLimit);
 
     // run the iteration loop
     currentModelPack = modelPack;
     modelPack.loop();
   } else if (command == "frameLimit") {
-    const {modelID, frameLimit} = e.data;
+    const { modelID, frameLimit } = e.data;
 
     if (currentModelPack.modelID == modelID) {
       currentModelPack.frameLimit = frameLimit;
