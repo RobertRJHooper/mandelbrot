@@ -32,11 +32,11 @@ class ModelPack {
       const {modelID, model, terminate, maxIterations, frameIndex, frameLimit, frameTime} = this;
 
       if (terminate) {
-        return reject('termination flag set', modelID);
+        return reject(`termination flag set for modelID ${modelID}`, );
       }
 
       if (model.iteration >= maxIterations) {
-        return reject('iteration limit reached', modelID);
+        return reject(`iteration limit reached for modelID ${modelID}`);
       }
 
       // update the model and paint updates to image buffer
