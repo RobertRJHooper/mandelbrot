@@ -381,6 +381,7 @@ class MandelbrotSample extends React.Component {
 
         const points = sample.zn.map((zi, i) =>
             <svg
+                key={i}
                 x={zi.re - pointSize / 2}
                 y={zi.im - pointSize / 2}
                 width={pointSize + "px"}
