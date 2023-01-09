@@ -81,7 +81,7 @@ class App extends React.Component {
 
             infoModalVisible: false,
 
-            sampleToggle: false,
+            sampleVisible: false,
             sampleC: math.complex(0, 0),
             sampleTooltipX: 0,
             sampleTooltipY: 0,
@@ -95,8 +95,8 @@ class App extends React.Component {
     }
 
     render() {
-        const { viewBox, infoModalVisible, sampleToggle, sampleC, sampleTooltipX, sampleTooltipY } = this.state;
-        const showSample = sampleToggle && (sampleC != null);
+        const { viewBox, infoModalVisible, sampleVisible, sampleC, sampleTooltipX, sampleTooltipY } = this.state;
+        const showSample = sampleVisible && (sampleC != null);
 
         return (
             <div className="app">
@@ -105,8 +105,8 @@ class App extends React.Component {
                 </div>
                 <div className="app-nav" style={{ zIndex: 1 }}>
                     <Navbar
-                        sampleToggle={sampleToggle}
-                        onSampleToggle={() => this.setState((state, props) => ({ sampleToggle: !state.sampleToggle }))}
+                        sampleVisible={sampleVisible}
+                        onSampleToggle={() => this.setState((state, props) => ({ sampleVisible: !state.sampleVisible }))}
                         onResetClick={() => this.setState({ viewBox: App.defaultViewBox })}
                         onInfoButtonClick={this.onInfoButtonClick} />
                 </div>
@@ -141,7 +141,7 @@ class App extends React.Component {
     }
 
     onPointHover(clientPoint, viewBoxPoint) {
-        if (clientPoint && viewBoxPoint && this.state.sampleToggle) {
+        if (clientPoint && viewBoxPoint && this.state.sampleVisible) {
             const sampleC = math.complex(viewBoxPoint.x, viewBoxPoint.y);
 
             if (sampleC != this.state.sampleC) {
@@ -218,7 +218,7 @@ class Navbar extends React.Component {
                         <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293l6-6Z" />
                     </svg>
                 </li>
-                <li className={this.props.sampleToggle ? "navbar-li navbar-li-active" : "navbar-li"}
+                <li className={this.props.sampleVisible ? "navbar-li navbar-li-active" : "navbar-li"}
                     onClick={this.props.onSampleToggle}>
                     {/* cursor icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
