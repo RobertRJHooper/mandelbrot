@@ -79,6 +79,8 @@ class App extends React.Component {
         this.state = {
             viewBox: App.defaultViewBox,
 
+            infoModalVisible: false,
+
             sampleToggle: false,
             sampleC: math.complex(0, 0),
             sampleTooltipX: 0,
@@ -87,19 +89,26 @@ class App extends React.Component {
 
         this.onBoxSelection = this.onBoxSelection.bind(this);
         this.onPointHover = this.onPointHover.bind(this);
+
+        this.onInfoButtonClick = () => this.setState({ infoModalVisible: true });
+        this.onInfoCloseClick = () => console.log('x') || this.setState({ infoModalVisible: false });
     }
 
     render() {
-        const { viewBox, sampleToggle, sampleC, sampleTooltipX, sampleTooltipY } = this.state;
+        const { viewBox, infoModalVisible, sampleToggle, sampleC, sampleTooltipX, sampleTooltipY } = this.state;
         const showSample = sampleToggle && (sampleC != null);
 
         return (
             <div className="app">
+                <div>
+                    <InfoModal visible={infoModalVisible} onCloseClick={this.onInfoCloseClick} />
+                </div>
                 <div className="app-nav" style={{ zIndex: 1 }}>
                     <Navbar
                         sampleToggle={sampleToggle}
                         onSampleToggle={() => this.setState((state, props) => ({ sampleToggle: !state.sampleToggle }))}
-                        onResetClick={() => this.setState({ viewBox: App.defaultViewBox })} />
+                        onResetClick={() => this.setState({ viewBox: App.defaultViewBox })}
+                        onInfoButtonClick={this.onInfoButtonClick} />
                 </div>
                 <div className="app-layer" style={{ zIndex: 0 }}>
                     <Selector
@@ -146,6 +155,51 @@ class App extends React.Component {
     }
 }
 
+class InfoModal extends React.Component {
+    static defaultProps = {
+        visible: false,
+        onCloseClick: null,
+    }
+
+    constructor(props) {
+        super(props);
+        this.backdrop = React.createRef();
+        this.onClick = this.onClick.bind(this);
+    }
+
+    render() {
+        return (
+            <div ref={this.backdrop} className="info-modal-backdrop" style={this.props.visible ? {} : { display: 'none' }}>
+                <div className="info-modal-content">
+                    {/* modal close X button */}
+                    <span
+                        className="info-modal-close"
+                        onClick={() => this.props.onCloseClick && this.props.onCloseClick()}>
+                        &times;
+                    </span>
+                    {/* start of modal content */}
+                    <p>Some text in the Modal..</p>
+                    {/* end of modal content */}
+                </div>
+            </div>
+        );
+    }
+
+    componentDidMount() {
+        window.addEventListener("click", this.onClick);
+    }
+
+    componentWillUnmount() {
+        window.removeEventListener("click", this.onClick);
+    }
+
+    onClick(event) {
+        if (event.target == this.backdrop.current) {
+            this.props.onCloseClick && this.props.onCloseClick();
+        }
+    }
+}
+
 class Navbar extends React.Component {
     constructor(props) {
         super(props);
@@ -171,7 +225,8 @@ class Navbar extends React.Component {
                         <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
                     </svg>
                 </li>
-                <li className="navbar-li">
+                <li className="navbar-li"
+                    onClick={() => this.props.onInfoButtonClick()}>
                     {/* info icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="m9.708 6.075-3.024.379-.108.502.595.108c.387.093.464.232.38.619l-.975 4.577c-.255 1.183.14 1.74 1.067 1.74.72 0 1.554-.332 1.933-.789l.116-.549c-.263.232-.65.325-.905.325-.363 0-.494-.255-.402-.704l1.323-6.208Zm.091-2.755a1.32 1.32 0 1 1-2.64 0 1.32 1.32 0 0 1 2.64 0Z" />
@@ -326,10 +381,10 @@ class MandelbrotSample extends React.Component {
 
         const points = sample.zn.map((zi, i) =>
             <svg
-                x={zi.re - pointSize/2}
-                y={zi.im - pointSize/2}
-                width={pointSize+ "px"}
-                height={pointSize+ "px"}
+                x={zi.re - pointSize / 2}
+                y={zi.im - pointSize / 2}
+                width={pointSize + "px"}
+                height={pointSize + "px"}
                 viewBox="-10 -10 20 20">
                 <circle r="10" className={escapedClass} />
                 <text x="-9" y="6"
