@@ -178,10 +178,38 @@ class InfoModal extends React.Component {
                         &times;
                     </span>
                     {/* start of modal content */}
-                    <p>Some text in the Modal..</p>
+                    <h1>Mandelbrot Set Explorer</h1>
+                    <p>
+                        The Mandelbrot set is the set of complex numbers <var>c</var> for which the
+                        function <var>f<sub>c</sub>(z)=z<sup>2</sup>+c</var> does not diverge to infinity
+                        when iterated from <var>z=0</var>. This app displays the Mandelbrot set and
+                        allows zooming for exploration.
+                    </p>
+                    <p>
+                        When the point is in Mandelbrot Set, the path will remain bounded.
+                        When the point is not in the set, the path will eventually escape
+                        (<var>|z<sub>n</sub>| &gt;= 2</var>) and this implies that
+                        (<var>z<sub>n</sub></var>) will be unbounded as <var>n</var> increases.
+                        Black points in the image are points in the set. Points outside the set are
+                        displayed in colour. When two points have the same escape iteration they have
+                        the same colour.
+                    </p>
+                    <p>
+                        The home button returns the view to the zoomed-out starting level.
+                        The initial value (<var>z<sub>0</sub></var>)
+                        and the path of the iterations (<var>z<sub>n</sub></var>) of a single point
+                        can be viewed by selecting the arrow button and hovering/selecting a point.
+                    </p>
+                    <p>
+                        The set is fractal in nature meaning that shapes seen at one zoom level will recur at higher
+                        zoom levels continuing indefinitely.
+                    </p>
+                    <p>
+                        More infomation is available on the Wikipedia page: <a href="https://en.wikipedia.org/wiki/Mandelbrot_set">https://en.wikipedia.org/wiki/Mandelbrot_set</a>
+                    </p>
                     {/* end of modal content */}
                 </div>
-            </div>
+            </div >
         );
     }
 
@@ -416,7 +444,7 @@ class MandelbrotSample extends React.Component {
                     <p>{MandelbrotSample.floatFormat(c.im)}i</p>
                     <hr></hr>
                     <p>
-                        Z<sub>n</sub>
+                        z<sub>n</sub>
                         <span className={escapedClass}>
                             {escaped ? ` escapes ` : " remains bounded"}
                         </span>
