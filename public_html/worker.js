@@ -1,6 +1,13 @@
 "use strict";
 importScripts('https://unpkg.com/mathjs/lib/browser/math.js', 'utils.js', 'model.js');
 
+class ModelTerminatedException extends Error {
+  constructor(modelID, reason) {
+    super(`${reason} on model ${modelID}`);
+    this.name = "ModelTerminatedException";
+  }
+}
+
 // minmum period between image posts
 const frameThrottlePeriod = 200;
 
@@ -34,11 +41,11 @@ class ModelPack {
       const { modelID, model, terminate, maxIterations, frameIndex, frameLimit, frameTime } = this;
 
       if (terminate) {
-        return reject(`termination flag set for modelID ${modelID}`,);
+        return reject(new ModelTerminatedException(modelID, 'terminate flag set'));
       }
 
       if (model.iteration >= maxIterations) {
-        return reject(`iteration limit reached for modelID ${modelID}`);
+        return reject(new ModelTerminatedException(modelID, 'iteration limit reached', modelID));
       }
 
       // update the model and paint updates to image buffer
@@ -85,7 +92,7 @@ class ModelPack {
       // loop the loop
       setTimeout(() => this.loop());
     }).catch(error => {
-      console.error('exception in model loop: ', error);
+      console.log(error);
     });
   }
 }

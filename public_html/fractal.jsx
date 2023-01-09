@@ -78,8 +78,11 @@ class App extends React.Component {
 
         this.state = {
             viewBox: App.defaultViewBox,
-            traceToggle: false,
-            traceZ: 0,
+
+            sampleToggle: false,
+            sampleC: math.complex(0, 0),
+            sampleTooltipX: 0,
+            sampleTooltipY: 0,
         }
 
         this.onBoxSelection = this.onBoxSelection.bind(this);
@@ -87,15 +90,15 @@ class App extends React.Component {
     }
 
     render() {
-        const { viewBox, gridWidth, gridHeight, traceToggle, traceZ } = this.state;
-        const showTrace = traceToggle && traceZ !== null;
+        const { viewBox, sampleToggle, sampleC, sampleTooltipX, sampleTooltipY } = this.state;
+        const showSample = sampleToggle && (sampleC != null);
 
         return (
-            <div>
+            <div className="app">
                 <div className="app-nav" style={{ zIndex: 1 }}>
                     <Navbar
-                        traceToggle={traceToggle}
-                        onTraceToggle={() => this.setState((state, props) => ({ traceToggle: !state.traceToggle }))}
+                        sampleToggle={sampleToggle}
+                        onSampleToggle={() => this.setState((state, props) => ({ sampleToggle: !state.sampleToggle }))}
                         onResetClick={() => this.setState({ viewBox: App.defaultViewBox })} />
                 </div>
                 <div className="app-layer" style={{ zIndex: 0 }}>
@@ -104,10 +107,13 @@ class App extends React.Component {
                         onPointHover={this.onPointHover}
                         onBoxSelection={this.onBoxSelection} />
                 </div>
-                <div className="app-layer" style={{ zIndex: -1, visibility: (showTrace ? "visible" : "hidden") }}>
+                <div className="app-layer" style={{ zIndex: -1, visibility: (showSample ? "visible" : "hidden") }}>
                     <MandelbrotSample
                         viewBox={viewBox}
-                        z={traceZ} />
+                        c={sampleC}
+                        maxIterations={100}
+                        tooltipX={sampleTooltipX}
+                        tooltipY={sampleTooltipY} />
                 </div>
                 <div className="app-layer" style={{ zIndex: -2 }}>
                     <MandelbrotSet viewBox={viewBox} />
@@ -125,27 +131,22 @@ class App extends React.Component {
         }
     }
 
-    onPointHover(point) {
-        const traceZ = point && math.complex(point.x, point.y);
+    onPointHover(clientPoint, viewBoxPoint) {
+        if (clientPoint && viewBoxPoint && this.state.sampleToggle) {
+            const sampleC = math.complex(viewBoxPoint.x, viewBoxPoint.y);
 
-        if (this.state.traceZ != traceZ) {
-            this.setState({ traceZ: traceZ });
+            if (sampleC != this.state.sampleC) {
+                this.setState({
+                    sampleC: sampleC,
+                    sampleTooltipX: clientPoint.x,
+                    sampleTooltipY: clientPoint.y,
+                });
+            }
         }
     }
 }
 
 class Navbar extends React.Component {
-    static defaultProps = {
-        traceToggle: true,
-        showInfoToggle: true,
-
-        currentZ: math.complex(0, 0),
-        iteration: 0,
-
-        onTraceToggle: null,
-        onResetClick: null,
-    }
-
     constructor(props) {
         super(props);
     }
@@ -163,8 +164,8 @@ class Navbar extends React.Component {
                         <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293l6-6Z" />
                     </svg>
                 </li>
-                <li className={this.props.traceToggle ? "navbar-li navbar-li-active" : "navbar-li"}
-                    onClick={this.props.onTraceToggle}>
+                <li className={this.props.sampleToggle ? "navbar-li navbar-li-active" : "navbar-li"}
+                    onClick={this.props.onSampleToggle}>
                     {/* cursor icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
@@ -303,49 +304,70 @@ class MandelbrotSet extends React.Component {
 }
 
 class MandelbrotSample extends React.Component {
-    static defaultProps = {
-        viewBox: "-2 -2 4 4",
-        z: "0.5 + 0.2i",
-        maxIterations: 100,
-    }
-
-    constructor(props) {
-        super(props);
-    }
+    static floatFormat = new Intl.NumberFormat(
+        "us-en",
+        {
+            signDisplay: 'always',
+            minimumFractionDigits: 15,
+            maximumFractionDigits: 15
+        }).format;
 
     render() {
-        const { z, maxIterations } = this.props;
+        const { viewBox, c, maxIterations, tooltipX, tooltipY } = this.props;
 
-        // get iteration of points
+        // generate sample
         // should be quick enough to be in here in render
-        const sample = mbSample(math.complex(z), maxIterations);
-        const points = sample.zn.map(zi => `${zi.re},${zi.im}`).join(' ');
+        const sample = mbSample(c, maxIterations);
         const escaped = sample.inMBS === false; // allow undetermined as in the set
+        const escapedClass = escaped ? "mandelbrotsample-escaped" : "mandelbrotsample-bounded";
+
+        const polyLine = sample.zn.map(zi => `${zi.re},${zi.im}`).join(' ');
+        const pointSize = (parseViewBox(viewBox).width / 100);
+
+        const points = sample.zn.map((zi, i) =>
+            <svg
+                x={zi.re - pointSize/2}
+                y={zi.im - pointSize/2}
+                width={pointSize+ "px"}
+                height={pointSize+ "px"}
+                viewBox="-10 -10 20 20">
+                <circle r="10" className={escapedClass} />
+                <text x="-9" y="6"
+                    lengthAdjust="spacingAndGlyphs" textLength="18px"
+                    transform="scale(1,-1)"
+                    style={{ font: "monospace 10px", stroke: "black", fill: "black" }}>
+                    {i}
+                </text>
+            </svg>
+        );
 
         return (
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="mandelbrotsample"
-                viewBox={this.props.viewBox}
-                transform="scale(1,-1)"
-                preserveAspectRatio="none">
-                <defs>
-                    <marker
-                        id="mandelbrotsample-marker"
-                        className={escaped ? "mandelbrotsample-marker-escaped" : "mandelbrotsample-marker-bounded"}
-                        viewBox="-5 -5 10 10"
-                        markerWidth="4"
-                        markerHeight="4">
-                        <circle r="5" />
-                    </marker>
-                </defs>
-                <polyline
-                    points={points}
-                    fill="none"
-                    markerStart="url(#mandelbrotsample-marker)"
-                    markerMid="url(#mandelbrotsample-marker)"
-                    markerEnd="url(#mandelbrotsample-marker)" />
-            </svg>
+            <div style={{ width: "100%", height: "100%" }}>
+                {/* points and joining line */}
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="mandelbrotsample"
+                    viewBox={viewBox}
+                    transform="scale(1,-1)"
+                    preserveAspectRatio="none">
+                    <polyline points={polyLine} fill="none"></polyline>
+                    {points}
+                </svg>
+
+                {/* tooltip */}
+                <div className="mandelbrotsample-infobox" style={{ left: tooltipX, top: tooltipY }}>
+                    <p>{MandelbrotSample.floatFormat(c.re)}</p>
+                    <p>{MandelbrotSample.floatFormat(c.im)}i</p>
+                    <hr></hr>
+                    <p>
+                        Z<sub>n</sub>
+                        <span className={escapedClass}>
+                            {escaped ? ` escapes ` : " remains bounded"}
+                        </span>
+                        {escaped ? `at n=${sample.escapeAge}` : ""}
+                    </p>
+                </div>
+            </div>
         );
     }
 }
@@ -413,17 +435,13 @@ class Selector extends React.Component {
             rect.left = rect.left + rect.width;
             rect.width = -1 * rect.width;
         }
+
         if (rect.height < 0) {
             rect.top = rect.top + rect.height;
             rect.height = -1 * rect.height;
         }
 
         return rect;
-    }
-
-    clientToViewBox(values) {
-        const frame = this.div.current.getBoundingClientRect();
-        return;
     }
 
     onMouseMove(e) {
@@ -447,9 +465,9 @@ class Selector extends React.Component {
         // callback to parent
         if (onPointHover && !clickedPoint && !clipped) {
             const pointInViewBox = clientToViewBox(divRect, parseViewBox(viewBox), newCurrentPoint);
-            onPointHover(pointInViewBox);
+            onPointHover(newCurrentPoint, pointInViewBox);
         } else {
-            onPointHover(null);
+            onPointHover(null, null);
         }
     }
 

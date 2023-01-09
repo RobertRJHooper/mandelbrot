@@ -63,21 +63,44 @@ body {
 .mandelbrotsample {
     width: 100%;
     height: 100%;
-    /* object-fit: cover; */
-
     stroke: darkgray;
     stroke-width: 0.2%;
     stroke-linecap: round;
 }
 
-.mandelbrotsample-marker-bounded {
+.mandelbrotsample-bounded {
+    color: green;
     fill: green;
+    stroke: green; 
 }
 
-.mandelbrotsample-marker-escaped {
+.mandelbrotsample-escaped {
+    color: red;
     fill: red;
+    stroke: green;
 }
 
+.mandelbrotsample-infobox {
+    position: absolute;
+
+    font-family: monospace;
+    font-size: 0.75em;
+
+    background-color: black;
+    color: #fff;
+    text-align: left;
+    margin: 15px;
+    border-radius: 6px;
+}
+
+.mandelbrotsample-infobox p {
+    margin: 2px;
+}
+
+.mandelbrotsample-infobox hr {
+    border-color: grey;
+    margin: 1px 1px 0 0;
+}
 
 .selector {
     width: 100%;
@@ -91,7 +114,7 @@ body {
     border: 0.2em solid black;
     box-shadow: 0 0 0.1em 0.2em lightgray;
     opacity: 70%;
-    
+
     /* transparent */
     background-color: rgba(0, 0, 0, 0);
 }

@@ -38,17 +38,18 @@ function mbInSecondary(c) {
 
 // give the complex numbers of a particular point to escape
 function mbSample(c, maxIterations = 100) {
-  const zn = [];
-  let z = c;
-  let escapeAge = null;
   let inMBS = null;
-
-  // check for known convergeance areas
+  
+  // check for simple bounded areas
   if (mbInPrimary(c) || mbInSecondary(c)) {
     inMBS = true;
   }
-
+  
   // get runout of points
+  let z = c;
+  const zn = [];
+  let escapeAge = null;
+  
   for (let i = 0; i < maxIterations; i++) {
     zn.push(z);
 
@@ -64,6 +65,7 @@ function mbSample(c, maxIterations = 100) {
   }
 
   return {
+    c: c,
     zn: zn,
     inMBS: inMBS,
     escapeAge: escapeAge,
