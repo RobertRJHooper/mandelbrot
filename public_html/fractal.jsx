@@ -90,8 +90,8 @@ class App extends React.Component {
         this.onBoxSelection = this.onBoxSelection.bind(this);
         this.onPointHover = this.onPointHover.bind(this);
 
-        this.onInfoButtonClick = () => this.setState({ infoModalVisible: true });
-        this.onInfoCloseClick = () => console.log('x') || this.setState({ infoModalVisible: false });
+        this.onInfoButtonClick = () => this.setState({ infoModalVisible: !this.state.infoModalVisible });
+        this.onInfoCloseClick = () => this.setState({ infoModalVisible: false });
     }
 
     render() {
@@ -105,9 +105,9 @@ class App extends React.Component {
                 </div>
                 <div className="app-nav" style={{ zIndex: 1 }}>
                     <Navbar
-                        sampleVisible={sampleVisible}
-                        onSampleToggle={() => this.setState((state, props) => ({ sampleVisible: !state.sampleVisible }))}
-                        onResetClick={() => this.setState({ viewBox: App.defaultViewBox })}
+                        sampleButtonActivated={sampleVisible}
+                        onSampleToggle={() => this.setState({sampleVisible: !this.state.sampleVisible })}
+                        onResetClick={() => this.setState({ viewBox: App.defaultViewBox, infoModalVisible: false })}
                         onInfoButtonClick={this.onInfoButtonClick} />
                 </div>
                 <div className="app-layer" style={{ zIndex: 0 }}>
@@ -186,12 +186,12 @@ class InfoModal extends React.Component {
                         allows zooming for exploration.
                     </p>
                     <p>
-                        When the point is in Mandelbrot Set, the path will remain bounded.
-                        When the point is not in the set, the path will eventually escape
+                        When a point is in Mandelbrot Set, the path will remain bounded.
+                        When a point is not in the set, the path will eventually escape
                         (<var>|z<sub>n</sub>| &gt;= 2</var>) and this implies that
                         (<var>z<sub>n</sub></var>) will be unbounded as <var>n</var> increases.
                         Black points in the image are points in the set. Points outside the set are
-                        displayed in colour. When two points have the same escape iteration they have
+                        displayed in various colour. When two points have the same escape iteration they have
                         the same colour.
                     </p>
                     <p>
@@ -246,7 +246,7 @@ class Navbar extends React.Component {
                         <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293l6-6Z" />
                     </svg>
                 </li>
-                <li className={this.props.sampleVisible ? "navbar-li navbar-li-active" : "navbar-li"}
+                <li className={this.props.sampleButtonActivated ? "navbar-li navbar-li-active" : "navbar-li"}
                     onClick={this.props.onSampleToggle}>
                     {/* cursor icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
