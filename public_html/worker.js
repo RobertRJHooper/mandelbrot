@@ -1,5 +1,5 @@
 "use strict";
-importScripts('https://unpkg.com/mathjs/lib/browser/math.js', 'utils.js', 'model.js');
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.5.0/math.js', 'model.js');
 
 class ModelTerminatedException extends Error {
   constructor(modelID, reason) {
@@ -15,15 +15,15 @@ const frameThrottlePeriod = 200;
 var currentModelPack = null;
 
 class ModelPack {
-  constructor(modelID, viewTopLeft, viewWidth, viewHeight, frameLimit) {
+  constructor(modelID, resX, resY, viewTopLeft, viewWidth, viewHeight, frameLimit) {
     this.modelID = modelID;
-
-    const gridHeight = 600, gridWidth = 800, maxIterations = 1000;
-    this.model = new MandelbrotSetModel(viewTopLeft, viewWidth, viewHeight, gridWidth, gridHeight);
+    
+    const maxIterations = 1000;
+    this.model = new MandelbrotSetModel(viewTopLeft, viewWidth, viewHeight, resX, resY);
     this.model.initiate();
 
     // create image and initialise (alpha component mainly)
-    this.image = new ImageData(gridWidth, gridHeight);
+    this.image = new ImageData(resX, resY);
     this.image.data.fill(255);
 
     // throttling information about the last frame issued
@@ -108,9 +108,9 @@ onmessage = function (e) {
       currentModelPack = null;
     }
 
-    const { modelID, viewTopLeft, viewWidth, viewHeight, frameLimit } = e.data;
+    const { modelID, resX, resY, viewTopLeft, viewWidth, viewHeight, frameLimit } = e.data;
     console.log('running model in worker', modelID);
-    const modelPack = new ModelPack(modelID, viewTopLeft, viewWidth, viewHeight, frameLimit);
+    const modelPack = new ModelPack(modelID, resX, resY, viewTopLeft, viewWidth, viewHeight, frameLimit);
 
     // run the iteration loop
     currentModelPack = modelPack;

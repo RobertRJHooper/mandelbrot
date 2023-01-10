@@ -26,13 +26,35 @@
 
   <script src="model.js"></script>
   <script type="text/babel" src="fractal.jsx"></script>
+
+  <style>
+    #app {
+      top: 50px;
+      left: 50px;
+      width: 800px;
+      height: 600px;
+    }
+
+    
+#app {
+      position: absolute;
+      top: 10vh;
+      left: 10vw;
+      width: 80vw;
+      height: 80vh;
+      border: 2px solid red;
+    }
+
+  </style>
 </head>
 
 <body>
-  <div id="app"></div>
-  <script type="text/babel">
-    const root = ReactDOM.createRoot(document.getElementById('app'));
-    root.render(<App />);
+  <div id="app">
+    <p>Loading App...</p>
+  </div>
+ 
+  <script type="text/babel">const root = ReactDOM.createRoot(document.getElementById('app'));
+    root.render(<App/>);
   </script>
 </body>
 

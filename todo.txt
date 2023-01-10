@@ -3,6 +3,9 @@ fix display then info bar blocking
 rename traceZ
 add splash screen with explanations
 add modal wikipedia page
+parameterise max iterations to app
+dont let sampler tooltip move out of the app frame
+convert numbered points to html elements so they zoom properly
 
 maybes:
 url anchoring to center and resolution
