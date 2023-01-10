@@ -25,38 +25,37 @@ var parseViewBox = _.memoize(function (s) {
 
 
 /*
-coordinate transformations from client space to viewBox space
-clientRect is the view in client space
-viewBox is the view in user space
-values are the coordinates/dimensions in client space to convert
+linear coordinate transformations of values from one rectangle box to another.
+The source and target rectangles are in the corresponding coordinate space.
+values are dimensions in the source space to transform to target space
 */
-function clientToViewBox(clientRect, viewBox, values) {
-    const fx = viewBox.width / clientRect.width;
-    const fy = viewBox.height / clientRect.height;
+function boxToBoxTransform(source, target, values) {
+    const fx = target.width / source.width;
+    const fy = target.height / source.height;
     const out = {};
 
     if (typeof values.x !== 'undefined') {
-        out.x = viewBox.left + (values.x - clientRect.left) * fx;
+        out.x = target.left + (values.x - source.left) * fx;
     }
 
     if (typeof values.left !== 'undefined') {
-        out.left = viewBox.left + (values.left - clientRect.left) * fx;
+        out.left = target.left + (values.left - source.left) * fx;
     }
 
     if (typeof values.right !== 'undefined') {
-        out.right = viewBox.left + (values.right - clientRect.left) * fx;
+        out.right = target.left + (values.right - source.left) * fx;
     }
 
     if (typeof values.y !== 'undefined') {
-        out.y = viewBox.top - (values.y - clientRect.top) * fy;
+        out.y = target.top - (values.y - source.top) * fy;
     }
 
     if (typeof values.top !== 'undefined') {
-        out.top = viewBox.top - (values.top - clientRect.top) * fy;
+        out.top = target.top - (values.top - source.top) * fy;
     }
 
     if (typeof values.bottom !== 'undefined') {
-        out.bottom = viewBox.top - (values.bottom - clientRect.top) * fy;
+        out.bottom = target.top - (values.bottom - source.top) * fy;
     }
 
     if (typeof values.width !== 'undefined') {
@@ -548,7 +547,7 @@ class Selector extends React.Component {
 
         // callback to parent
         if (onPointHover && !clickedPoint && !clipped) {
-            const pointInViewBox = clientToViewBox(divRect, parseViewBox(viewBox), newCurrentPoint);
+            const pointInViewBox = boxToBoxTransform(divRect, parseViewBox(viewBox), newCurrentPoint);
             onPointHover(newCurrentPoint, pointInViewBox);
         } else {
             onPointHover(null, null);
@@ -581,7 +580,7 @@ class Selector extends React.Component {
                 const bg = this.boxGeometry(clickedPoint, currentPoint);
 
                 if (bg.width && bg.height) {
-                    onBoxSelection(clientToViewBox(divRect, parseViewBox(viewBox), bg));
+                    onBoxSelection(boxToBoxTransform(divRect, parseViewBox(viewBox), bg));
                 }
             }
         }
