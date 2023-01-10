@@ -589,6 +589,3 @@ class Selector extends React.Component {
         this.setState({ clickedPoint: null });
     }
 }
-
-const root = ReactDOM.createRoot(document.getElementById('app'));
-root.render(<App />);
