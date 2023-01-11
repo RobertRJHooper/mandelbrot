@@ -170,7 +170,14 @@ class MandelbrotSet extends React.Component {
 
         this.canvas = React.createRef();
         this.worker = null;
-        this.resizeObserver = new ResizeObserver(this.resizeObserved.bind(this));
+
+        this.resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.target == this.canvas.current) {
+                    this.setCanvasBlur();
+                }
+            }
+        });
     }
 
     render() {
@@ -185,19 +192,15 @@ class MandelbrotSet extends React.Component {
     }
 
     // set blur level for the canvas
-    resizeObserved(entries) {
+    setCanvasBlur() {
         const canvas = this.canvas.current;
+        const canvasWidth = canvas.getAttribute("width");
+        const boxWidth = canvas.getBoundingClientRect().width;
+        const currentBlurPixels = canvas.style.getProperty('--blur');
+        const newBlurPixels = 0.5 * boxWidth / canvasWidth;
 
-        for (const entry of entries) {
-            if(entry.target == canvas) {
-                const canvasWidth = canvas.getAttribute("width");
-                const boxWidth = canvas.getBoundingClientRect().width;
-
-                if (canvasWidth) {
-                    const blurPixels = 0.5 * boxWidth / canvasWidth;
-                    canvas.style.setProperty('--blur', blurPixels + "px");
-                }
-            }
+        if (canvasWidth && newBlurPixels != currentBlurPixels) {
+            canvas.style.setProperty('--blur', newBlurPixels + "px");
         }
     }
 
@@ -429,11 +432,11 @@ class Selector extends React.Component {
     boxGeometry(clickedPoint, currentPoint) {
         const divRect = this.div.current.getBoundingClientRect();
         const aspect = divRect.height ? divRect.width / divRect.height : 1;
-        
+
         const dx = currentPoint.x - clickedPoint.x;
         const dy = currentPoint.y - clickedPoint.y;
-        const diagonal = Math.sqrt(dx*dx+dy*dy);
-        
+        const diagonal = Math.sqrt(dx * dx + dy * dy);
+
         const rect = {
             left: clickedPoint.x,
             top: clickedPoint.y,
