@@ -195,7 +195,7 @@ class MandelbrotSet extends React.Component {
         const canvas = this.canvas.current;
         const canvasWidth = canvas.getAttribute("width");
         const boxWidth = canvas.getBoundingClientRect().width;
-        const currentBlurPixels = canvas.style.getProperty('--blur');
+        const currentBlurPixels = canvas.style.getPropertyValue('--blur');
         const newBlurPixels = 0.5 * boxWidth / canvasWidth;
 
         if (canvasWidth && newBlurPixels != currentBlurPixels) {
@@ -432,29 +432,57 @@ class Selector extends React.Component {
 
     // get box dimensions maintaining aspect ration of div container
     boxGeometry(clickedPoint, currentPoint) {
+        const { min, max, sign, abs } = Math;
+
         const divRect = this.div.current.getBoundingClientRect();
-        const aspect = divRect.height ? divRect.width / divRect.height : 1;
+        const divAspectRatio = (divRect.height && divRect.width) ? divRect.width / divRect.height : 1;
 
         const dx = currentPoint.x - clickedPoint.x;
         const dy = currentPoint.y - clickedPoint.y;
-        const diagonal = Math.sqrt(dx * dx + dy * dy);
+        const sx = sign(dx) || 1;
+        const sy = sign(dy) || 1;
 
+        /*
+        choose width so that;
+        1) one corner is the clicked point
+        2) the box is the largest that touches the current
+        point while maintaining aspect ratio
+        3) the box is bounded by the div container
+        */
+       let absWidth = max(abs(dx), abs(dy) * divAspectRatio);
+
+        // div rectangle bounds
+        const dxMax = (sx == 1) ?
+            abs(divRect.left + divRect.width - clickedPoint.x)
+            : abs(divRect.left - clickedPoint.x);
+
+        const dyMax = (sy == 1) ?
+            abs(divRect.top + divRect.height - clickedPoint.y)
+            : abs(divRect.top - clickedPoint.y);
+
+        absWidth = min(absWidth, dxMax, dyMax * divAspectRatio);
+
+        // generate height
+        const width = absWidth * sx;
+        const height = absWidth / divAspectRatio * sy;
+
+        // construct rectangle from dimensions
         const rect = {
             left: clickedPoint.x,
             top: clickedPoint.y,
-            width: diagonal * (Math.sign(dx) || 1),
-            height: diagonal / aspect * (Math.sign(dy) || 1),
+            width: width,
+            height: height,
         }
 
-        // inside out
+        // correct inside out rectangle
         if (rect.width < 0) {
             rect.left = rect.left + rect.width;
-            rect.width = -1 * rect.width;
+            rect.width *= -1;
         }
 
         if (rect.height < 0) {
             rect.top = rect.top + rect.height;
-            rect.height = -1 * rect.height;
+            rect.height *= -1;
         }
 
         return rect;
@@ -511,7 +539,7 @@ class Selector extends React.Component {
                     height: bg.height
                 };
 
-                if (bg.width && bg.height) {
+                if (bg.width > 10 && bg.height > 10) {
                     onBoxSelection(boxToBoxTransform(divRect, parseViewBox(viewBox), clientBox));
                 }
             }
