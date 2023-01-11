@@ -170,6 +170,7 @@ class MandelbrotSet extends React.Component {
 
         this.canvas = React.createRef();
         this.worker = null;
+        this.resizeObserver = new ResizeObserver(this.resizeObserved.bind(this));
     }
 
     render() {
@@ -181,6 +182,23 @@ class MandelbrotSet extends React.Component {
                 className="mandelbrotset">
             </canvas>
         );
+    }
+
+    // set blur level for the canvas
+    resizeObserved(entries) {
+        const canvas = this.canvas.current;
+
+        for (const entry of entries) {
+            if(entry.target == canvas) {
+                const canvasWidth = canvas.getAttribute("width");
+                const boxWidth = canvas.getBoundingClientRect().width;
+
+                if (canvasWidth) {
+                    const blurPixels = 0.5 * boxWidth / canvasWidth;
+                    canvas.style.setProperty('--blur', blurPixels + "px");
+                }
+            }
+        }
     }
 
     startModel() {
@@ -239,6 +257,7 @@ class MandelbrotSet extends React.Component {
         this.worker = new Worker('worker.js');
         this.worker.onmessage = this.workerMessage.bind(this);
         this.startModel();
+        this.resizeObserver.observe(this.canvas.current);
     }
 
     componentDidUpdate(prevProps, prevState) {
@@ -258,7 +277,7 @@ class MandelbrotSet extends React.Component {
             const frameWidth = frameBitmap.width;
             const frameHeight = frameBitmap.height;
             const canvasWidth = canvas.getAttribute("width");
-            const canvasHeight = canvas.getAttribute("width");
+            const canvasHeight = canvas.getAttribute("height");
 
             // check/update canvas dimensions
             if (canvasWidth != frameWidth || canvasHeight != frameHeight) {
@@ -279,6 +298,7 @@ class MandelbrotSet extends React.Component {
     componentWillUnmount() {
         this.worker && this.worker.terminate();
         this.worker = null;
+        this.resizeObserver.unobserve(this.canvas.current);
     }
 }
 
@@ -405,12 +425,20 @@ class Selector extends React.Component {
         window.removeEventListener("mouseup", this.onMouseUp);
     }
 
+    // get box dimensions maintaining aspect ration of div container
     boxGeometry(clickedPoint, currentPoint) {
+        const divRect = this.div.current.getBoundingClientRect();
+        const aspect = divRect.height ? divRect.width / divRect.height : 1;
+        
+        const dx = currentPoint.x - clickedPoint.x;
+        const dy = currentPoint.y - clickedPoint.y;
+        const diagonal = Math.sqrt(dx*dx+dy*dy);
+        
         const rect = {
             left: clickedPoint.x,
             top: clickedPoint.y,
-            width: currentPoint.x - clickedPoint.x,
-            height: currentPoint.y - clickedPoint.y,
+            width: diagonal * (Math.sign(dx) || 1),
+            height: diagonal / aspect * (Math.sign(dy) || 1),
         }
 
         // inside out
