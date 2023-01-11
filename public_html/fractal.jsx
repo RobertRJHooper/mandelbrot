@@ -191,7 +191,6 @@ class MandelbrotSet extends React.Component {
         );
     }
 
-    // set blur level for the canvas
     setCanvasBlur() {
         const canvas = this.canvas.current;
         const canvasWidth = canvas.getAttribute("width");
@@ -291,6 +290,9 @@ class MandelbrotSet extends React.Component {
             // paint bitmap to canvas
             const context = canvas.getContext('2d', { alpha: false });
             context.drawImage(frameBitmap, 0, 0);
+
+            // update blur level
+            this.setCanvasBlur();
 
             // issue update to worker to increase frame limit
             const newFrameLimit = frameIndex + this.props.frameThrottle;
