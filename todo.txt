@@ -1,17 +1,11 @@
 Features to make:
-fix display then info bar blocking
-rename traceZ
-add splash screen with explanations
-add modal wikipedia page
-parameterise max iterations to app
-dont let sampler tooltip move out of the app frame
-convert numbered points to html elements so they zoom properly
-box only on left click
 initial box to object-fit transformation on window
 zoom box - allow any size and then cover transfor the viewbox
-click release to fix the sample point. reclick to cancel.
 
 maybes:
+click release to fix the sample point. reclick to cancel.
+convert numbered points to html elements so they zoom properly
+parameterise max iterations to app
 url anchoring to center and resolution
 touch zooming, double tap unzoom
 trace stick on click
@@ -21,6 +15,9 @@ high precision numbers
 test in safari
 
 done:
+box only on left click
+dont let sampler tooltip move out of the app frame
+add modal wikipedia page
 convergeance trace on mouse over
 info overlay
 fix click positioning with the box

@@ -433,46 +433,11 @@ class Selector extends React.Component {
 
     // get box dimensions maintaining aspect ration of div container
     boxGeometry(clickedPoint, currentPoint) {
-        const { min, max, sign, abs } = Math;
-
-        const divRect = this.div.current.getBoundingClientRect();
-        const divAspectRatio = (divRect.height && divRect.width) ? divRect.width / divRect.height : 1;
-
-        const dx = currentPoint.x - clickedPoint.x;
-        const dy = currentPoint.y - clickedPoint.y;
-        const sx = sign(dx) || 1;
-        const sy = sign(dy) || 1;
-
-        /*
-        choose width so that;
-        1) one corner is the clicked point
-        2) the box is the largest that touches the current
-        point while maintaining aspect ratio
-        3) the box is bounded by the div container
-        */
-       let absWidth = max(abs(dx), abs(dy) * divAspectRatio);
-
-        // div rectangle bounds
-        const dxMax = (sx == 1) ?
-            abs(divRect.left + divRect.width - clickedPoint.x)
-            : abs(divRect.left - clickedPoint.x);
-
-        const dyMax = (sy == 1) ?
-            abs(divRect.top + divRect.height - clickedPoint.y)
-            : abs(divRect.top - clickedPoint.y);
-
-        absWidth = min(absWidth, dxMax, dyMax * divAspectRatio);
-
-        // generate height
-        const width = absWidth * sx;
-        const height = absWidth / divAspectRatio * sy;
-
-        // construct rectangle from dimensions
         const rect = {
             left: clickedPoint.x,
             top: clickedPoint.y,
-            width: width,
-            height: height,
+            width: currentPoint.x - clickedPoint.x,
+            height: currentPoint.y - clickedPoint.y,
         }
 
         // correct inside out rectangle
@@ -515,8 +480,10 @@ class Selector extends React.Component {
     }
 
     onMouseDown(e) {
-        const divRect = this.div.current.getBoundingClientRect();
-        this.setState({ clickedPoint: { x: e.clientX - divRect.left, y: e.clientY - divRect.top } });
+        if (e.button == 0) {
+            const divRect = this.div.current.getBoundingClientRect();
+            this.setState({ clickedPoint: { x: e.clientX - divRect.left, y: e.clientY - divRect.top } });
+        }
     }
 
     onMouseUp(e) {
