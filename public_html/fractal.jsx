@@ -208,7 +208,7 @@ class MandelbrotSet extends React.Component {
 
         // create a unique model id
         const modelID = Date.now() + "" + Math.floor(Math.random() * 1000000);
-        console.debug('starting model', modelID);
+        console.debug(modelID, 'starting model');
 
         // set initial model state details
         this.setState({
@@ -238,13 +238,13 @@ class MandelbrotSet extends React.Component {
 
         this.setState(function (state, props) {
             if (state.modelID != modelID) {
-                console.debug('orphan message from worker', modelID);
+                console.debug(modelID, 'orphan message from worker');
                 return {};
             }
 
             // don't display out of sequence frames
             if (state.frameIndex >= frameIndex) {
-                console.debug('late frame returned', modelID, frameIndex);
+                console.debug(modelID, 'late frame returned', frameIndex);
                 return {};
             }
 

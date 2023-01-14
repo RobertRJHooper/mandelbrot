@@ -7,8 +7,8 @@ importScripts(
 );
 
 class ModelTerminatedException extends Error {
-  constructor(modelID, reason) {
-    super(`${reason} on model ${modelID}`);
+  constructor(reason) {
+    super(reason);
     this.name = "ModelTerminatedException";
   }
 }
@@ -23,11 +23,13 @@ class ModelPack {
   constructor(modelID, resX, resY, view, frameLimit) {
     this.modelID = modelID;
 
-    const maxIterations = 1000;
     this.model = new MandelbrotGrid(resX, resY, view);
     this.model.initiate();
     this.model.setKnownPoints();
 
+    this.iteration = 0;
+    this.maxIterations = 1000;
+    
     // create image and initialise (alpha component mainly)
     this.image = new ImageData(resX, resY);
     this.image.data.fill(255);
@@ -39,7 +41,6 @@ class ModelPack {
 
     // termination info
     this.terminate = false;
-    this.maxIterations = maxIterations;
   }
 
   loop() {
@@ -47,16 +48,17 @@ class ModelPack {
       const { modelID, model, terminate, maxIterations, frameIndex, frameLimit, frameTime } = this;
 
       if (terminate) {
-        return reject(new ModelTerminatedException(modelID, 'terminate flag set'));
+        return reject(new ModelTerminatedException('terminate flag set'));
       }
 
-      if (model.iteration >= maxIterations) {
-        return reject(new ModelTerminatedException(modelID, 'iteration limit reached', modelID));
+      if (this.iteration >= maxIterations) {
+        return reject(new ModelTerminatedException('iteration limit reached', modelID));
       }
 
       // update the model and paint updates to image buffer
       //console.time('model.iterate()');
       model.iterate();
+      this.iteration += 1;
       //console.timeEnd('model.iterate()');
       model.paint(this.image);
 
@@ -66,7 +68,7 @@ class ModelPack {
         || frameTime && (now < frameTime + frameThrottlePeriod);
 
       // if it's the last iteration then we send always
-      if (model.iteration == maxIterations - 1) {
+      if (this.iteration == maxIterations - 1) {
         throttle = false;
       }
 
@@ -90,7 +92,7 @@ class ModelPack {
         postMessage(message, [frameBitmap]);
       }
     }).then(() => {
-      if (this.model.iteration % 5 == 1) {
+      if (this.iteration % 5 == 1) {
         // compact the model so future iterations are quicker
         this.model.compact();
       }
@@ -98,7 +100,11 @@ class ModelPack {
       // loop the loop
       setTimeout(() => this.loop());
     }).catch(error => {
-      console.log(error);
+      if (error instanceof ModelTerminatedException) {
+        console.debug(this.modelID, error.message);
+      } else {
+        console.error(error);
+      }
     });
   }
 }
@@ -109,13 +115,13 @@ onmessage = function (e) {
 
   if (command == "init") {
     if (currentModelPack) {
-      console.log(`marking current model pack for termination ${currentModelPack.modelID}`);
+      console.log(currentModelPack.modelID, "marking current model pack for termination");
       currentModelPack.terminate = true;
       currentModelPack = null;
     }
 
     const { modelID, resX, resY, view, frameLimit } = e.data;
-    console.log('running model in worker', modelID);
+    console.log(modelID, 'running model in worker');
     const modelPack = new ModelPack(modelID, resX, resY, view, frameLimit);
 
     // run the iteration loop

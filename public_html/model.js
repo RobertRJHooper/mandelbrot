@@ -1,7 +1,5 @@
 "use strict";
 
-const { Profiler } = require("react");
-
 function mbIterate(z, c) {
   const { re, im } = z;
 
