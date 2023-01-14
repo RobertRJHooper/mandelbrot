@@ -74,8 +74,8 @@ class App extends React.Component {
     static initialViewBox = "-2 -2 4 4";
 
     static defaultProps = {
-        resX: 800,
-        resY: 600,
+        resX: 80,
+        resY: 60,
     }
 
     constructor(props) {
@@ -225,9 +225,10 @@ class MandelbrotSet extends React.Component {
             modelID: modelID,
             resX: resX,
             resY: resY,
-            viewTopLeft: math.complex(vb.left, vb.top),
-            viewWidth: vb.width,
-            viewHeight: vb.height,
+            view: {
+                topLeft: math.complex(vb.left, vb.top),
+                width: vb.width,
+                height: vb.height},
             frameLimit: frameThrottle,
         });
     }

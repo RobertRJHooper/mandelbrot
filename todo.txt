@@ -6,6 +6,10 @@ add modal wikipedia page
 parameterise max iterations to app
 dont let sampler tooltip move out of the app frame
 convert numbered points to html elements so they zoom properly
+box only on left click
+initial box to object-fit transformation on window
+zoom box - allow any size and then cover transfor the viewbox
+click release to fix the sample point. reclick to cancel.
 
 maybes:
 url anchoring to center and resolution

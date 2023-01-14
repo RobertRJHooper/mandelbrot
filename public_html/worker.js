@@ -1,5 +1,10 @@
 "use strict";
-importScripts('https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.5.0/math.js', 'model.js');
+
+importScripts(
+  'https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.5.0/math.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js',
+  'model.js'
+);
 
 class ModelTerminatedException extends Error {
   constructor(modelID, reason) {
@@ -15,12 +20,13 @@ const frameThrottlePeriod = 200;
 var currentModelPack = null;
 
 class ModelPack {
-  constructor(modelID, resX, resY, viewTopLeft, viewWidth, viewHeight, frameLimit) {
+  constructor(modelID, resX, resY, view, frameLimit) {
     this.modelID = modelID;
-    
+
     const maxIterations = 1000;
-    this.model = new MandelbrotSetModel(viewTopLeft, viewWidth, viewHeight, resX, resY);
+    this.model = new MandelbrotGrid(resX, resY, view);
     this.model.initiate();
+    this.model.setKnownPoints();
 
     // create image and initialise (alpha component mainly)
     this.image = new ImageData(resX, resY);
@@ -108,9 +114,9 @@ onmessage = function (e) {
       currentModelPack = null;
     }
 
-    const { modelID, resX, resY, viewTopLeft, viewWidth, viewHeight, frameLimit } = e.data;
+    const { modelID, resX, resY, view, frameLimit } = e.data;
     console.log('running model in worker', modelID);
-    const modelPack = new ModelPack(modelID, resX, resY, viewTopLeft, viewWidth, viewHeight, frameLimit);
+    const modelPack = new ModelPack(modelID, resX, resY, view, frameLimit);
 
     // run the iteration loop
     currentModelPack = modelPack;
