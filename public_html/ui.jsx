@@ -1,28 +1,83 @@
 "use strict";
 
-var parseViewBox = _.memoize(function (s) {
-    if (typeof s != 'string') {
-        throw new TypeError('string expected');
+class ViewBox {
+    constructor(box) {
+        if (typeof box == "string") {
+            const arr = box.split(/\s*[\s,]\s*/).map(x => Number.parseFloat(x));
+
+            if (arr.length != 4) {
+                throw new TypeError('four numbers expected for a view box string');
+            }
+
+            const [left, bottom, width, height] = arr;
+
+            this.left = left;
+            this.right = left + width;
+            this.bottom = bottom;
+            this.top = bottom + height;
+            this.width = width;
+            this.height = height;
+        } else {
+            this.left = box.left;
+            this.top = box.top;
+            this.width = box.width;
+            this.height = box.height;
+            this.right = box.left + box.width;
+            this.bottom = box.top - box.height;
+        }
     }
 
-    const arr = s.split(/\s*[\s,]\s*/).map(x => Number.parseFloat(x));
-
-    if (arr.length != 4) {
-        throw new TypeError('four numbers expected for a view box');
+    toString() {
+        return [this.left, this.bottom, this.width, this.height].map(x => x.toString()).join(' ');
     }
 
-    const [left, bottom, width, height] = arr;
+    // fit to a rectangle and return the containing new view box
+    // fitting means setting the aspect ratio of the view to equal the box
+    // by extending or contracting the bounding dimensions
+    // fitting can be either: 'cover' or 'contain'
+    // similar to object-fit css property
+    fit(rect, fitting) {
+        const thisAspectRatio = this.width / this.height;
+        const rectAspectRatio = rect.width / rect.height;
 
-    return {
-        left: left,
-        right: left + width,
-        bottom: bottom,
-        top: bottom + height,
-        width: width,
-        height: height
-    };
-});
+        let dimensionToAdjust;
+        if (fitting == "cover") {
+            if (thisAspectRatio > rectAspectRatio) {
+                dimensionToAdjust = "width";
+            } else {
+                dimensionToAdjust = "height";
+            }
+        } else if (fitting == "contain") {
+            if (thisAspectRatio > rectAspectRatio) {
+                dimensionToAdjust = "height";
+            } else {
+                dimensionToAdjust = "width";
+            }
+        } else {
+            throw new ValueError("unrecognised fit value");
+        }
 
+        if (dimensionToAdjust == "width") {
+            const width = this.height * rectAspectRatio;
+            return new ViewBox({
+                top: this.top,
+                left: this.left + this.width / 2 - width / 2,
+                height: this.height,
+                width: width,
+            });
+        } else {
+            const height = this.width / rectAspectRatio;
+            return new ViewBox({
+                top: this.top - this.height / 2 + height / 2,
+                left: this.left,
+                height: height,
+                width: this.width,
+            });
+        }
+    }
+}
+
+const parseViewBox = _.memoize(box => (typeof box == "string") ? new ViewBox(box) : box);
 
 /*
 linear coordinate transformations of values from one rectangle box to another.
@@ -83,38 +138,57 @@ class App extends React.Component {
 
         this.state = {
             viewBox: App.initialViewBox,
+            containerDimensions: null,
+
             infoModalVisible: false,
             samplerVisible: false,
             samplerC: math.complex(0, 0),
         }
 
+        this.container = React.createRef();
         this.onBoxSelection = this.onBoxSelection.bind(this);
         this.onPointHover = this.onPointHover.bind(this);
         this.onInfoButtonClick = () => this.setState({ infoModalVisible: !this.state.infoModalVisible });
         this.onInfoCloseClick = () => this.setState({ infoModalVisible: false });
     }
 
+    // outer render
     render() {
-        const { resX, resY } = this.props;
-        const { viewBox, infoModalVisible, samplerVisible, samplerC } = this.state;
-        const showSampler = samplerVisible && (samplerC != null);
+        const { containerDimensions } = this.state;
 
         return (
-            <div className="app">
+            <div className="app" ref={this.container}>
+                {containerDimensions && this.renderContent()}
+            </div>
+        );
+    }
+
+    // inner render when we know the container dimensions
+    // and hence the aspect ratio
+    renderContent() {
+        const { resX, resY } = this.props;
+        const { viewBox, containerDimensions, infoModalVisible, samplerVisible, samplerC } = this.state;
+        const showSampler = samplerVisible && (samplerC != null);
+
+        // fit viewbox to the container
+        const viewBoxFitted = parseViewBox(viewBox).fit(containerDimensions, 'contain').toString();
+
+        return (
+            <div>
                 <MandelbrotSet
-                    viewBox={viewBox}
+                    viewBox={viewBoxFitted}
                     resX={resX}
                     resY={resY} />
 
                 <div style={{ display: (showSampler ? "" : "none") }}>
                     <Sampler
-                        viewBox={viewBox}
+                        viewBox={viewBoxFitted}
                         c={samplerC}
                         maxIterations={100} />
                 </div>
 
                 <Selector
-                    viewBox={viewBox}
+                    viewBox={viewBoxFitted}
                     onPointHover={this.onPointHover}
                     onBoxSelection={this.onBoxSelection} />
 
@@ -129,6 +203,33 @@ class App extends React.Component {
                     onCloseClick={this.onInfoCloseClick} />
             </div>
         );
+    }
+
+    setDimensions() {
+        const container = this.container.current;
+
+        this.setState({
+            containerDimensions: {
+                width: container.offsetWidth,
+                height: container.offsetHeight,
+            },
+        });
+    }
+
+    componentDidMount() {
+        this.setDimensions();
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        const { containerDimensions } = this.state;
+
+        const dimensionsUpdate = !prevState.containerDimensions ||
+            prevState.containerDimensions.width != containerDimensions.width
+            && prevState.containerDimensions.height != containerDimensions.height;
+
+        if (dimensionsUpdate) {
+            this.setDimensions();
+        }
     }
 
     onBoxSelection(box) {
@@ -204,7 +305,8 @@ class MandelbrotSet extends React.Component {
     }
 
     startModel() {
-        const { viewBox, resX, resY, frameThrottle } = this.props;
+        const { resX, resY, frameThrottle } = this.props;
+        const viewBox = parseViewBox(this.props.viewBox);
 
         // create a unique model id
         const modelID = Date.now() + "" + Math.floor(Math.random() * 1000000);
@@ -217,18 +319,17 @@ class MandelbrotSet extends React.Component {
             bitmap: null,
         });
 
-        // start calculations on worker
-        const vb = parseViewBox(viewBox);
-
+        // start calculations in worker
         this.worker.postMessage({
             command: 'init',
             modelID: modelID,
             resX: resX,
             resY: resY,
             view: {
-                topLeft: math.complex(vb.left, vb.top),
-                width: vb.width,
-                height: vb.height},
+                topLeft: math.complex(viewBox.left, viewBox.top),
+                width: viewBox.width,
+                height: viewBox.height
+            },
             frameLimit: frameThrottle,
         });
     }
@@ -269,7 +370,7 @@ class MandelbrotSet extends React.Component {
         const modelChanged = viewBox != prevProps.viewBox
             || resX != prevProps.resX
             || resY != prevProps.resY;
-        modelChanged && this.startModel();
+        modelChanged && viewBox && this.startModel();
 
         // paint a new frame to the canvas
         const { modelID, frameIndex, frameBitmap } = this.state;
