@@ -15,7 +15,7 @@
 
     /* variable blur is dynamically calculated by the model */
     --blur: 0;
-    filter: blur(var(--blur));
+    /* filter: blur(var(--blur)); */
 }
 
 .sampler {

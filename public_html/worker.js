@@ -25,7 +25,6 @@ class ModelPack {
 
     this.model = new MandelbrotGrid(resX, resY, view);
     this.model.initiate();
-    this.model.setKnownPoints();
 
     this.iteration = 0;
     this.maxIterations = 1000;

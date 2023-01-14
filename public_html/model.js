@@ -1,17 +1,5 @@
 "use strict";
 
-function mbIterate(z, c) {
-  const { re, im } = z;
-
-  return math.complex(
-    re * re - im * im + c.re,
-    2 * re * im + c.im);
-}
-
-function mbEscaped(z) {
-  const { re, im } = z;
-  return re * re + im * im > 4;
-}
 
 // is the point in the main cardiod where zn converges?
 function mbInPrimary(c) {
@@ -30,7 +18,7 @@ function mbInPrimary(c) {
   // full calculation
   // modulus(sqrt(1-4c) - 1) < 1
   const z = math.add(math.sqrt(math.add(math.multiply(c, -4), 1)), -1);
-  return z * z.conjugate() < 0.9999;
+  return math.abs(z) < 0.9999;
 }
 
 // is the point in the secondary circle when zn has period two in limit?
@@ -40,40 +28,80 @@ function mbInSecondary(c) {
   return re * re + im * im < 1 / 16;
 }
 
+function mbEscaped(z) {
+  const { re, im } = z;
+  return re * re + im * im > 4;
+}
+
+function mbIterate(z, c) {
+  const { re, im } = z;
+
+  return math.complex(
+    re * re - im * im + c.re,
+    2 * re * im + c.im);
+}
+
+class Point {
+  static zero = math.complex(0, 0);
+
+  constructor(c, checkFormula = true) {
+    this.c = c;
+    this.z = Point.zero;
+    this.age = 0;
+
+    // escape has three values
+    // true: escape happended at the given age
+    // false: escape will never happen (determined externally by formula)
+    // null: escape undetermined so far at this age
+    this.escape = null;
+
+    // formula checks
+    if (checkFormula) {
+      if (mbInPrimary(c) || mbInSecondary(c)) {
+        this.escape = false;
+      }
+    }
+  }
+
+  undetermined() {
+    return this.escape === null;
+  }
+
+  iterate() {
+    if (this.undetermined()) {
+      const zNext = mbIterate(this.z, this.c);
+
+      this.age += 1;
+      this.z = zNext;
+
+      if (mbEscaped(zNext)) {
+        this.escape = true;
+      }
+    }
+  }
+}
+
 // give the complex numbers of a particular point to escape
 function mbSample(c, maxIterations = 100) {
-  let inMBS = null;
+  const point = new Point(c, false);
 
-  // check for simple bounded areas
-  if (mbInPrimary(c) || mbInSecondary(c)) {
-    inMBS = true;
+  // runout of points
+  const zi = [];
+
+  // run to escape of max iterations
+  while (point.undetermined() && point.age < maxIterations) {
+    zi.push(point.z);
+    point.iterate();
   }
 
-  // get runout of points
-  let z = c;
-  const zn = [];
-  let escapeAge = null;
-
-  for (let i = 0; i < maxIterations; i++) {
-    zn.push(z);
-
-    if (escapeAge === null && mbEscaped(z)) {
-      escapeAge = i;
-      inMBS = false;
-
-      // include one iteration after escape
-      maxIterations = i + 2;
-    }
-
-    z = mbIterate(z, c);
+  // add an extra iteration after the escape point
+  if (point.age < maxIterations) {
+    zi.push(mbIterate(point.c, point.z));
   }
 
-  return {
-    c: c,
-    zn: zn,
-    inMBS: inMBS,
-    escapeAge: escapeAge,
-  }
+  // append info to point and return
+  point.zi = zi;
+  return point;
 }
 
 // helper to get the complex value of an (x, y) point in the grid
@@ -156,21 +184,23 @@ class MandelbrotGrid {
 
   initiate() {
     const { width, height, view } = this;
-    const z0 = math.complex(0, 0);
-    const points = [];
 
+    function newPoint(x, y) {
+      const c = gridToValue(width, height, view, x, y);
+      const point = new Point(c);
+
+      // add extra info to point structure
+      point.idx = y * width + x;
+      point.x = x;
+      point.y = y;
+
+      return point;
+    }
+
+    const points = [];
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        points.push({
-          idx: y * width + x,
-          x: x,
-          y: y,
-          c: gridToValue(width, height, view, x, y),
-          z: z0,
-          age: 0,
-          inMBS: null,
-        });
-
+        points.push(newPoint(x, y));
       }
     }
 
@@ -178,30 +208,8 @@ class MandelbrotGrid {
     this.live = points;
   }
 
-  // set known escape ages for a subset of points using formula
-  setKnownPoints() {
-    for (const point of this.live) {
-      const { c } = point;
-
-      if (mbEscaped(c)) {
-        point.inMBS = false;
-      } else if (mbInPrimary(c) || mbInSecondary(c)) {
-        point.inMBS = true;
-      }
-    }
-  }
-
   iterate() {
-    for (const point of this.live) {
-      if (point.inMBS === null) {
-        point.z = mbIterate(point.z, point.c);
-        point.age += 1;
-
-        if (mbEscaped(point.z)) {
-          point.inMBS = false;
-        }
-      }
-    }
+    this.live.forEach(p => p.iterate());
   }
 
   // update the image with the new model data of live points
@@ -211,23 +219,27 @@ class MandelbrotGrid {
 
     for (const point of this.live) {
       const idx = point.idx * 4;
-      const { inMBS, age } = point;
+      const { escape, age } = point;
 
-      if (inMBS === null || inMBS == true) {
+      if (escape === null) {
         data[idx + 0] = 0;
         data[idx + 1] = 0;
         data[idx + 2] = 0;
-      } else if (inMBS === false) {
+      } else if (escape) {
         const rgb = ageToRGB(age);
         data[idx + 0] = rgb[0];
         data[idx + 1] = rgb[1];
         data[idx + 2] = rgb[2];
+      } else {
+        data[idx + 0] = 255;
+        data[idx + 1] = 0;
+        data[idx + 2] = 255;
       }
     }
   }
 
   // update live list
   compact() {
-    this.live = this.live.filter(point => point.inMBS === null);
+    this.live = this.live.filter(p => p.undetermined());
   }
 }

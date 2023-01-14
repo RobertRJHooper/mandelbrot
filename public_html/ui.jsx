@@ -74,8 +74,8 @@ class App extends React.Component {
     static initialViewBox = "-2 -2 4 4";
 
     static defaultProps = {
-        resX: 80,
-        resY: 60,
+        resX: 800,
+        resY: 600,
     }
 
     constructor(props) {
@@ -325,12 +325,12 @@ class Sampler extends React.Component {
         // generate sample
         // should be quick enough to be in here in render
         const sample = mbSample(c, maxIterations);
-        const escaped = sample.inMBS === false; // allow undetermined as in the set
+        const escaped = sample.escape === true; // allow undetermined as in the set
         const escapedClass = escaped ? "sampler-escaped" : "sampler-bounded";
 
-        const polyLine = sample.zn.map(zi => `${zi.re},${zi.im}`).join(' ');
+        const polyLine = sample.zi.map(zi => `${zi.re},${zi.im}`).join(' ');
         const pointSize = viewBox.width / 80;
-        const points = sample.zn.map((zi, i) =>
+        const points = sample.zi.map((zi, i) =>
             <svg
                 key={i}
                 x={zi.re - pointSize / 2}
@@ -374,7 +374,7 @@ class Sampler extends React.Component {
                         <span className={escapedClass}>
                             {escaped ? ` escapes ` : " remains bounded"}
                         </span>
-                        {escaped ? `at n=${sample.escapeAge}` : ""}
+                        {escaped ? `at n=${sample.age}` : ""}
                     </p>
                 </div>
             </div>
