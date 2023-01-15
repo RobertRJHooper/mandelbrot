@@ -47,7 +47,7 @@ class ModelPack {
       const { modelID, model, terminate, maxIterations, frameIndex, frameLimit, frameTime } = this;
 
       if (terminate) {
-        return reject(new ModelTerminatedException('terminate flag set'));
+        return reject(new ModelTerminatedException('model pack terminated'));
       }
 
       if (this.iteration >= maxIterations) {
@@ -100,7 +100,7 @@ class ModelPack {
       setTimeout(() => this.loop());
     }).catch(error => {
       if (error instanceof ModelTerminatedException) {
-        console.debug(this.modelID, error.message);
+        console.debug(this.modelID, "loop ended with message:", error.message);
       } else {
         console.error(error);
       }
