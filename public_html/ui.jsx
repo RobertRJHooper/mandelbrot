@@ -75,55 +75,58 @@ class ViewBox {
             });
         }
     }
+
+    /* transform values in a source rectangle coordinate system to the viewbox coordinate system */
+    transform(rect, values, flipVertical = true) {
+        const fx = this.width / rect.width;
+        const fy = this.height / rect.height;
+        const fv = flipVertical ? -1 : 1;
+
+        const out = {};
+
+        if (typeof values.x !== 'undefined') {
+            out.x = this.left + (values.x - rect.left) * fx;
+        }
+
+        if (typeof values.left !== 'undefined') {
+            out.left = this.left + (values.left - rect.left) * fx;
+        }
+
+        if (typeof values.right !== 'undefined') {
+            out.right = this.left + (values.right - rect.left) * fx;
+        }
+
+        if (typeof values.y !== 'undefined') {
+            out.y = this.top + (values.y - rect.top) * fy * fv;
+        }
+
+        if (typeof values.top !== 'undefined') {
+            out.top = this.top + (values.top - rect.top) * fy * fv;
+        }
+
+        if (typeof values.bottom !== 'undefined') {
+            out.bottom = this.top + (values.bottom - rect.top) * fy * fv;
+        }
+
+        if (typeof values.width !== 'undefined') {
+            out.width = values.width * fx;
+        }
+
+        if (typeof values.height !== 'undefined') {
+            out.height = values.height * fy;
+        }
+
+        if([out.left, out.top, out.width, out.height].map(x => typeof x).every(x => x !== 'undefined')) {
+            return new ViewBox(out);
+        }
+        
+        return out;
+    }
 }
 
-const parseViewBox = _.memoize(box => (typeof box == "string") ? new ViewBox(box) : box);
+/* cached view box parsing */
+const parseViewBox = _.memoize(box => (box instanceof ViewBox ? box : new ViewBox(box)));
 
-/*
-linear coordinate transformations of values from one rectangle box to another.
-The source and target rectangles are in the corresponding coordinate space.
-values are dimensions in the source space to transform to target space
-*/
-function boxToBoxTransform(source, target, values, flipVertical = true) {
-    const fx = target.width / source.width;
-    const fy = target.height / source.height;
-    const fv = flipVertical ? -1 : 1;
-    const out = {};
-
-    if (typeof values.x !== 'undefined') {
-        out.x = target.left + (values.x - source.left) * fx;
-    }
-
-    if (typeof values.left !== 'undefined') {
-        out.left = target.left + (values.left - source.left) * fx;
-    }
-
-    if (typeof values.right !== 'undefined') {
-        out.right = target.left + (values.right - source.left) * fx;
-    }
-
-    if (typeof values.y !== 'undefined') {
-        out.y = target.top + (values.y - source.top) * fy * fv;
-    }
-
-    if (typeof values.top !== 'undefined') {
-        out.top = target.top + (values.top - source.top) * fy * fv;
-    }
-
-    if (typeof values.bottom !== 'undefined') {
-        out.bottom = target.top + (values.bottom - source.top) * fy * fv;
-    }
-
-    if (typeof values.width !== 'undefined') {
-        out.width = values.width * fx;
-    }
-
-    if (typeof values.height !== 'undefined') {
-        out.height = values.height * fy;
-    }
-
-    return out;
-}
 
 class App extends React.Component {
     static initialViewBox = "-2 -2 4 4";
@@ -152,7 +155,7 @@ class App extends React.Component {
         this.onInfoCloseClick = () => this.setState({ infoModalVisible: false });
     }
 
-    // outer render
+    // outer render before dimensions are known
     render() {
         const { containerDimensions } = this.state;
 
@@ -223,21 +226,16 @@ class App extends React.Component {
     componentDidUpdate(prevProps, prevState) {
         const { containerDimensions } = this.state;
 
-        const dimensionsUpdate = !prevState.containerDimensions ||
-            prevState.containerDimensions.width != containerDimensions.width
-            && prevState.containerDimensions.height != containerDimensions.height;
-
-        if (dimensionsUpdate) {
-            this.setDimensions();
+        if (!_.isEqual(prevState.containerDimensions, containerDimensions)) {
+            containerDimensions && this.setDimensions();
         }
     }
 
-    onBoxSelection(box) {
-        console.log("sub box selected", box);
-        const viewBox = [box.left, box.top - box.height, box.width, box.height].map((x) => x.toString()).join(' ');
+    onBoxSelection(subViewBox) {
+        console.log("sub box selected", subViewBox);
 
-        if (viewBox != this.state.viewBox) {
-            this.setState({ viewBox: viewBox });
+        if (subViewBox != this.state.viewBox) {
+            this.setState({ viewBox: subViewBox });
         }
     }
 
@@ -565,7 +563,7 @@ class Selector extends React.Component {
 
         // hover callback to parent
         if (onPointHover && currentPointMoved && !clickedPoint && !clipped) {
-            const viewBoxPoint = boxToBoxTransform(divRect, parseViewBox(viewBox), { x: clientX, y: clientY });
+            const viewBoxPoint = parseViewBox(viewBox).transform(divRect, { x: clientX, y: clientY });
             onPointHover(viewBoxPoint);
         }
     }
@@ -591,15 +589,11 @@ class Selector extends React.Component {
 
             if (eventInDiv) {
                 const bg = this.boxGeometry(clickedPoint, currentPoint);
-                const clientBox = {
-                    left: divRect.left + bg.left,
-                    top: divRect.top + bg.top,
-                    width: bg.width,
-                    height: bg.height
-                };
+                const bgBox = {left: 0, top: 0, width: divRect.width, height: divRect.height};
 
                 if (bg.width > 10 && bg.height > 10) {
-                    onBoxSelection(boxToBoxTransform(divRect, parseViewBox(viewBox), clientBox));
+                    const subViewBox = parseViewBox(parseViewBox(viewBox).transform(bgBox, bg)).toString();
+                    onBoxSelection(subViewBox);
                 }
             }
         }
