@@ -114,7 +114,7 @@ onmessage = function (e) {
 
   if (command == "init") {
     if (currentModelPack) {
-      console.log(currentModelPack.modelID, "marking current model pack for termination");
+      console.log(currentModelPack.modelID, "marking model pack for termination");
       currentModelPack.terminate = true;
       currentModelPack = null;
     }
