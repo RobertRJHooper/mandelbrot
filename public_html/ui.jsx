@@ -271,14 +271,6 @@ class MandelbrotSet extends React.Component {
 
         this.canvas = React.createRef();
         this.worker = null;
-
-        this.resizeObserver = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                if (entry.target == this.canvas.current) {
-                    this.setCanvasBlur();
-                }
-            }
-        });
     }
 
     render() {
@@ -292,27 +284,21 @@ class MandelbrotSet extends React.Component {
         );
     }
 
-    setCanvasBlur() {
-        const canvas = this.canvas.current;
-        const canvasWidth = canvas.getAttribute("width");
-        const boxWidth = canvas.getBoundingClientRect().width;
-        const currentBlurPixels = canvas.style.getPropertyValue('--blur');
-        const newBlurPixels = 0.5 * boxWidth / canvasWidth;
-
-        if (canvasWidth && newBlurPixels != currentBlurPixels) {
-            canvas.style.setProperty('--blur', newBlurPixels + "px");
-        }
-    }
-
     startModel() {
         const { resX, resY, frameThrottle } = this.props;
         const viewBox = parseViewBox(this.props.viewBox);
+
+        // checks on parameters
+        if (!resX || !resY || !viewBox.width || !viewBox.height) {
+            console.log("trivial view, cancelling calculation");
+            return;
+        }
 
         // create a unique model id
         const modelID = Date.now() + "" + Math.floor(Math.random() * 1000000);
         console.debug(modelID, 'starting model');
 
-        // set initial model state details
+        // set initial model state details (clearing old values)
         this.setState({
             modelID: modelID,
             frameIndex: null,
@@ -357,55 +343,59 @@ class MandelbrotSet extends React.Component {
         });
     }
 
+    // paint the current frame to the canvas
+    paint() {
+        const canvas = this.canvas.current;
+        const { frameBitmap } = this.state;
+
+        const frameWidth = frameBitmap.width;
+        const frameHeight = frameBitmap.height;
+        const canvasWidth = canvas.getAttribute("width");
+        const canvasHeight = canvas.getAttribute("height");
+
+        // check/update canvas dimensions
+        if (canvasWidth != frameWidth || canvasHeight != frameHeight) {
+            canvas.setAttribute("width", frameWidth);
+            canvas.setAttribute("height", frameHeight);
+        }
+
+        // paint bitmap to canvas
+        const context = canvas.getContext('2d', { alpha: false });
+        context.drawImage(frameBitmap, 0, 0);
+    }
+
     componentDidMount() {
         this.worker = new Worker('worker.js');
         this.worker.onmessage = this.workerMessage.bind(this);
         this.startModel();
-        this.resizeObserver.observe(this.canvas.current);
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { viewBox, resX, resY } = this.props;
+        const { viewBox, resX, resY, frameThrottle } = this.props;
+        const { modelID, frameIndex } = this.state;
 
+        // new model required?
         const modelChanged = viewBox != prevProps.viewBox
             || resX != prevProps.resX
             || resY != prevProps.resY;
-        modelChanged && viewBox && this.startModel();
+        modelChanged && this.startModel();
 
         // paint a new frame to the canvas
-        const { modelID, frameIndex, frameBitmap } = this.state;
-        const frameUpdate = !modelChanged && frameIndex != prevState.frameIndex;
-
-        if (frameUpdate) {
-            const canvas = this.canvas.current;
-            const frameWidth = frameBitmap.width;
-            const frameHeight = frameBitmap.height;
-            const canvasWidth = canvas.getAttribute("width");
-            const canvasHeight = canvas.getAttribute("height");
-
-            // check/update canvas dimensions
-            if (canvasWidth != frameWidth || canvasHeight != frameHeight) {
-                canvas.setAttribute("width", frameWidth);
-                canvas.setAttribute("height", frameHeight);
-            }
-
-            // paint bitmap to canvas
-            const context = canvas.getContext('2d', { alpha: false });
-            context.drawImage(frameBitmap, 0, 0);
-
-            // update blur level
-            this.setCanvasBlur();
+        if (!modelChanged && frameIndex != prevState.frameIndex) {
+            this.paint();
 
             // issue update to worker to increase frame limit
-            const newFrameLimit = frameIndex + this.props.frameThrottle;
-            this.worker.postMessage({ command: 'frameLimit', modelID: modelID, frameLimit: newFrameLimit });
+            this.worker.postMessage({
+                command: 'frameLimit',
+                modelID: modelID,
+                frameLimit: frameIndex + frameThrottle,
+            });
         }
     }
 
     componentWillUnmount() {
         this.worker && this.worker.terminate();
         this.worker = null;
-        this.resizeObserver.unobserve(this.canvas.current);
     }
 }
 
