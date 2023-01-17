@@ -1,26 +1,31 @@
 Features to make:
-initial box to object-fit transformation on window
-zoom box - allow any size and then cover transfor the viewbox
-
-maybes:
-click release to fix the sample point. reclick to cancel.
-convert numbered points to html elements so they zoom properly
-parameterise max iterations to app
-url anchoring to center and resolution
 touch zooming, double tap unzoom
 trace stick on click
-github releases mechanism for continous deployment
-use memoization to improve performance of viewBox parsing
 high precision numbers
+url anchoring to center and resolution
+observer to resize on canvas change with debounce
+
+maybes:
 test in safari
+add stats to info panel
+get libraries local copy for speed
+
+maybe nots:
+github releases mechanism for continous deployment
+convert numbered points to html elements so they zoom properly
+time limiting
 
 done:
+iterations limiting with idling
+use memoization to improve performance of viewBox parsing
 box only on left click
 dont let sampler tooltip move out of the app frame
 add modal wikipedia page
 convergeance trace on mouse over
 info overlay
 fix click positioning with the box
+initial box to object-fit transformation on window
+zoom box - allow any size and then cover transfor the viewbox
 
 notes:
 software implementation planning: survey available libraries to minimise reinventing the wheel.

@@ -11,7 +11,7 @@ importScripts(
 const frameThrottlePeriod = 250;
 
 class ModelPack {
-  constructor(modelID, workerID, resX, resY, view, step, offset, frameLimit) {
+  constructor(modelID, workerID, resX, resY, view, step, offset, frameLimit, iterationsLimit) {
     this.modelID = modelID;
     this.workerID = workerID;
     this.resX = resX;
@@ -22,7 +22,9 @@ class ModelPack {
 
     this.model = null;
     this.terminate = false;
+
     this.frameLimit = frameLimit;
+    this.iterationsLimit = iterationsLimit;
   }
 
   initiate() {
@@ -31,22 +33,49 @@ class ModelPack {
     this.model.initiate();
 
     this.iteration = 0;
-    this.frameIndex = 0;
+    this.frameIndex = null;
+    this.frameIteration = null;
     this.frameTime = null;
   }
 
-  checkThrottle(t) {
+  isFrameThrottled(timestamp) {
     const { frameIndex, frameLimit, frameTime } = this;
 
     if (frameIndex >= frameLimit) {
       return true;
     }
 
-    if (frameTime && (t < frameTime + frameThrottlePeriod)) {
+    if (frameTime && (timestamp < frameTime + frameThrottlePeriod)) {
       return true;
     }
 
     return false;
+  }
+
+  async postFrame(timestamp) {
+    const bitmap = await createImageBitmap(this.model.image);
+    
+    // update last frame status
+    this.frameIndex = (this.frameIndex || 0) + 1;
+    this.frameIteration = this.iteration;
+    this.frameTime = timestamp;
+
+    // send to master
+    postMessage({
+      modelID: this.modelID,
+      workerID: this.workerID,
+      iteration: this.frameIteration,
+      index: this.frameIndex,
+      bitmap: bitmap,
+    }, [bitmap]);
+
+    
+    if (this.workerID == 0) {
+      const points = _.sortBy(this.model.points, p => (p.escapeAge || 0));
+
+      const p = points[points.length - 1];
+      console.log(this.iteration, p.escapeAge, p.c);
+    }
   }
 
   async loop() {
@@ -60,25 +89,21 @@ class ModelPack {
       return;
     }
 
-    this.model.iterate();
-    this.iteration += 1;
+    if(this.iteration <= this.iterationsLimit) {
+      this.model.iterate();
+      this.iteration += 1;
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 100)); // snooze
+    }
 
-    // post a frame if the throttle doesn't bite
-    const timestamp = Date.now();
+    // post frame if something has changed
+    // and the throttle doesn't bite
+    if(this.frameIteration !== this.iteration) {
+      const timestamp = Date.now();
 
-    if (!this.checkThrottle(timestamp)) {
-      const bitmap = await createImageBitmap(this.model.image);
-
-      postMessage({
-        modelID: this.modelID,
-        workerID: this.workerID,
-        iteration: this.iteration,
-        frameIndex: this.frameIndex,
-        bitmap: bitmap,
-      }, [bitmap]);
-
-      this.frameIndex += 1;
-      this.frameTime = timestamp;
+      if (!this.isFrameThrottled(timestamp)) {
+        await this.postFrame(timestamp);
+      }
     }
 
     // loop the loop
@@ -101,8 +126,8 @@ onmessage = function (e) {
       }
 
       console.log(e.data.modelID, e.data.workerID, 'running model in worker');
-      const { modelID, workerID, resX, resY, view, step, offset, frameLimit } = e.data;
-      const modelPack = new ModelPack(modelID, workerID, resX, resY, view, step, offset, frameLimit);
+      const { modelID, workerID, resX, resY, view, step, offset, frameLimit, iterationsLimit } = e.data;
+      const modelPack = new ModelPack(modelID, workerID, resX, resY, view, step, offset, frameLimit, iterationsLimit);
 
       // run the iteration loop
       currentModelPack = modelPack;
@@ -112,10 +137,11 @@ onmessage = function (e) {
     }
 
     case 'limit': {
-      const { modelID, frameLimit } = e.data;
+      const { modelID, frameLimit, iterationsLimit } = e.data;
 
       if (currentModelPack.modelID == modelID) {
         currentModelPack.frameLimit = frameLimit;
+        currentModelPack.iterationsLimit = iterationsLimit;
       }
 
       break;

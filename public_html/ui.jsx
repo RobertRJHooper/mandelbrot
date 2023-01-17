@@ -245,7 +245,9 @@ class App extends React.Component {
 }
 
 class MandelbrotSet extends React.Component {
+    static maxWorkerCount = 1;
     static frameThrottle = 5;
+    static iterationsLimit = 4000;
 
     static defaultProps = {
         viewBox: "-2 -2 4 4",
@@ -329,6 +331,7 @@ class MandelbrotSet extends React.Component {
                 offset: workerIndex,
 
                 frameLimit: MandelbrotSet.frameThrottle,
+                iterationsLimit: MandelbrotSet.iterationsLimit,
             });
         });
     }
@@ -365,18 +368,18 @@ class MandelbrotSet extends React.Component {
     }
 
     flushFrames() {
-        const frames = this.frames;
+        let frames = this.frames;
 
         // nothing to do?
         if (!frames.length) {
             return;
         }
 
-        // new frames go to a new array
+        // future new frames go to a new array
         this.frames = [];
 
         // sort by iteration for smoother render
-        frames.sort(f => f.iteration);
+        frames = _.sortBy(frames, f => f.iteration);
 
         // render to canvas
         const context = this.canvas.current.getContext('2d');
@@ -384,11 +387,11 @@ class MandelbrotSet extends React.Component {
 
         // update throttle limits
         frames.forEach(f => {
-            const {modelID, workerID, frameIndex} = f;
+            const {modelID, workerID, index} = f;
             const lastIndex = this.frameIndex[workerID] || 0;
 
-            if (lastIndex < frameIndex) {
-                this.frameIndex[workerID] = frameIndex;
+            if (lastIndex < index) {
+                this.frameIndex[workerID] = index;
             }
 
             // notify workers of new throttle limit
@@ -398,12 +401,13 @@ class MandelbrotSet extends React.Component {
                 command: 'limit',
                 modelID: modelID,
                 frameLimit: frameLimit,
+                iterationsLimit: MandelbrotSet.iterationsLimit,
             });
         });
     }
 
     componentDidMount() {
-        const workerCount = Math.min(navigator.hardwareConcurrency || 1, 8);
+        const workerCount = Math.min(navigator.hardwareConcurrency || 1, MandelbrotSet.maxWorkerCount);
         this.workers = []
 
         for (let i = 0; i < workerCount; i++) {
