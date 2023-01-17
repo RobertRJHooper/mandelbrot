@@ -21,6 +21,7 @@ class ModelPack {
     this.offset = offset;
 
     this.model = null;
+    this.initiated = false;
     this.terminate = false;
 
     this.frameLimit = frameLimit;
@@ -28,14 +29,15 @@ class ModelPack {
   }
 
   initiate() {
+    console.log(this.modelID, this.workerID, 'initiating model in worker');
     const { resX, resY, view, step, offset } = this;
     this.model = new MandelbrotGrid(resX, resY, view, step, offset);
     this.model.initiate();
-
     this.iteration = 0;
     this.frameIndex = null;
     this.frameIteration = null;
     this.frameTime = null;
+    this.initiated = true;
   }
 
   isFrameThrottled(timestamp) {
@@ -78,24 +80,28 @@ class ModelPack {
     }
   }
 
-  async loop() {
-    if (this.terminate) {
-      console.log(this.modelID, this.workerID, 'model calculation terminated');
+  // do the next piece of work
+  async work() {
+    if(!this.initiated) {
+      this.initiate();
       return;
     }
 
     if(!this.model.live.length) {
       console.log(this.modelID, this.workerID, 'no remaining live points, model terminated');
+      this.terminate = true;
       return;
     }
 
-    if(this.iteration <= this.iterationsLimit) {
-      this.model.iterate();
-      this.iteration += 1;
-    } else {
-      await new Promise(resolve => setTimeout(resolve, 100)); // snooze
+    if(this.iteration >= this.iterationsLimit) {
+      console.log(this.modelID, this.workerID, 'iteration limit reached, terminating');
+      this.terminate = true;
+      return;
     }
 
+    this.model.iterate();
+    this.iteration += 1;
+    
     // post frame if something has changed
     // and the throttle doesn't bite
     if(this.frameIteration !== this.iteration) {
@@ -105,43 +111,42 @@ class ModelPack {
         await this.postFrame(timestamp);
       }
     }
-
-    // loop the loop
-    setTimeout(() => this.loop());
   }
 }
 
 // info on current model running
 var currentModelPack = null;
 
+// main loop
+async function loop() {
+  const modelPack = currentModelPack;
+
+  if(modelPack && !modelPack.terminate) {
+    await modelPack.work();
+  } else {
+    await new Promise(resolve => setTimeout(resolve, 100)); // snooze
+  }
+
+  setTimeout(loop);
+}
+loop();
+
 // incoming message handler
 onmessage = function (e) {
-  const command = e.data.command;
-
-  switch (command) {
+  switch (e.data.command) {
     case 'initiate': {
-      if (currentModelPack) {
-        currentModelPack.terminate = true;
-        currentModelPack = null;
-      }
-
-      console.log(e.data.modelID, e.data.workerID, 'running model in worker');
       const { modelID, workerID, resX, resY, view, step, offset, frameLimit, iterationsLimit } = e.data;
-      const modelPack = new ModelPack(modelID, workerID, resX, resY, view, step, offset, frameLimit, iterationsLimit);
-
-      // run the iteration loop
-      currentModelPack = modelPack;
-      modelPack.initiate();
-      modelPack.loop();
+      currentModelPack = new ModelPack(modelID, workerID, resX, resY, view, step, offset, frameLimit, iterationsLimit);
       break;
     }
 
     case 'limit': {
+      const modelPack = currentModelPack;
       const { modelID, frameLimit, iterationsLimit } = e.data;
 
-      if (currentModelPack.modelID == modelID) {
-        currentModelPack.frameLimit = frameLimit;
-        currentModelPack.iterationsLimit = iterationsLimit;
+      if (modelPack.modelID == modelID) {
+        modelPack.frameLimit = Math.max(frameLimit, currentModelPack.frameLimit);
+        modelPack.iterationsLimit = iterationsLimit;
       }
 
       break;
