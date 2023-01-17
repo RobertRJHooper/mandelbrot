@@ -116,10 +116,10 @@ class ViewBox {
             out.height = values.height * fy;
         }
 
-        if([out.left, out.top, out.width, out.height].map(x => typeof x).every(x => x !== 'undefined')) {
+        if ([out.left, out.top, out.width, out.height].map(x => typeof x).every(x => x !== 'undefined')) {
             return new ViewBox(out);
         }
-        
+
         return out;
     }
 }
@@ -130,11 +130,6 @@ const parseViewBox = _.memoize(box => (box instanceof ViewBox ? box : new ViewBo
 
 class App extends React.Component {
     static initialViewBox = "-2 -2 4 4";
-
-    static defaultProps = {
-        resX: 800,
-        resY: 600,
-    }
 
     constructor(props) {
         super(props);
@@ -169,7 +164,6 @@ class App extends React.Component {
     // inner render when we know the container dimensions
     // and hence the aspect ratio
     renderContent() {
-        const { resX, resY } = this.props;
         const { viewBox, containerDimensions, infoModalVisible, samplerVisible, samplerC } = this.state;
         const showSampler = samplerVisible && (samplerC != null);
 
@@ -180,8 +174,8 @@ class App extends React.Component {
             <div>
                 <MandelbrotSet
                     viewBox={viewBoxFitted}
-                    resX={resX}
-                    resY={resY} />
+                    resX={containerDimensions.width}
+                    resY={containerDimensions.height} />
 
                 <div style={{ display: (showSampler ? "" : "none") }}>
                     <Sampler
@@ -251,11 +245,12 @@ class App extends React.Component {
 }
 
 class MandelbrotSet extends React.Component {
+    static frameThrottle = 5;
+
     static defaultProps = {
         viewBox: "-2 -2 4 4",
         resX: 200,
         resY: 200,
-        frameThrottle: 5,
     }
 
     constructor(props) {
@@ -263,12 +258,15 @@ class MandelbrotSet extends React.Component {
 
         this.state = {
             modelID: null,
-            frameIndex: null,
-            frameBitmap: null,
+            frameCounter: 0,
         }
 
         this.canvas = React.createRef();
-        this.worker = null;
+        this.workers = null;
+
+        // unprocessed frames from workers
+        this.frames = [];
+        this.frameIndex = {}; // frame index by workerID
     }
 
     render() {
@@ -282,8 +280,8 @@ class MandelbrotSet extends React.Component {
         );
     }
 
-    startModel() {
-        const { resX, resY, frameThrottle } = this.props;
+    workerSubmit() {
+        const { resX, resY } = this.props;
         const viewBox = parseViewBox(this.props.viewBox);
 
         // checks on parameters
@@ -292,108 +290,155 @@ class MandelbrotSet extends React.Component {
             return;
         }
 
+        if (!this.workers || !this.workers.length) {
+            console.error("no workers set up");
+            return;
+        }
+
         // create a unique model id
         const modelID = Date.now() + "" + Math.floor(Math.random() * 1000000);
         console.debug(modelID, 'starting model');
 
+        // clear frame receptical
+        this.frames = [];
+        this.frameIndex = {};
+
         // set initial model state details (clearing old values)
         this.setState({
             modelID: modelID,
-            frameIndex: null,
-            bitmap: null,
+            frameCount: 0,
         });
 
-        // start calculations in worker
-        this.worker.postMessage({
-            command: 'init',
-            modelID: modelID,
-            resX: resX,
-            resY: resY,
-            view: {
-                topLeft: math.complex(viewBox.left, viewBox.top),
-                width: viewBox.width,
-                height: viewBox.height
-            },
-            frameLimit: frameThrottle,
+        // initiate workers
+        const workerCount = this.workers.length;
+
+        this.workers.forEach((worker, workerIndex) => {
+            worker.postMessage({
+                command: 'initiate',
+                modelID: modelID,
+                workerID: workerIndex,
+
+                resX: resX,
+                resY: resY,
+                view: {
+                    topLeft: math.complex(viewBox.left, viewBox.top),
+                    width: viewBox.width,
+                    height: viewBox.height
+                },
+                step: workerCount,
+                offset: workerIndex,
+
+                frameLimit: MandelbrotSet.frameThrottle,
+            });
         });
     }
 
     workerMessage(message) {
-        const { modelID, frameBitmap, frameIndex } = message.data;
+        const { modelID } = message.data;
 
-        this.setState(function (state, props) {
-            if (state.modelID != modelID) {
-                console.debug(modelID, 'orphan message from worker');
-                return {};
-            }
+        if (this.state.modelID != modelID) {
+            console.debug(modelID, 'orphan message from worker');
+            return;
+        }
 
-            // don't display out of sequence frames
-            if (state.frameIndex >= frameIndex) {
-                console.debug(modelID, 'late frame returned', frameIndex);
-                return {};
-            }
-
-            // set state
-            return {
-                frameIndex: frameIndex,
-                frameBitmap: frameBitmap,
-            };
-        });
+        this.frames.push(message.data);
+        this.setState((state, props) => ({ frameCount: state.frameCount + 1 }));
     }
 
-    // paint the current frame to the canvas
-    paint() {
-        const canvas = this.canvas.current;
-        const { frameBitmap } = this.state;
+    initiateCanvas() {
+        const { resX, resY } = this.props;
 
-        const frameWidth = frameBitmap.width;
-        const frameHeight = frameBitmap.height;
+        const canvas = this.canvas.current;
         const canvasWidth = canvas.getAttribute("width");
         const canvasHeight = canvas.getAttribute("height");
 
-        // check/update canvas dimensions
-        if (canvasWidth != frameWidth || canvasHeight != frameHeight) {
-            canvas.setAttribute("width", frameWidth);
-            canvas.setAttribute("height", frameHeight);
+        // check/update canvas
+        if (canvasWidth != resX || canvasHeight != resY) {
+            canvas.setAttribute("width", resX);
+            canvas.setAttribute("height", resY);
         }
 
-        // paint bitmap to canvas
-        const context = canvas.getContext('2d', { alpha: false });
-        context.drawImage(frameBitmap, 0, 0);
+        // clear to black
+        const context = canvas.getContext('2d');
+        context.beginPath();
+        context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    flushFrames() {
+        const frames = this.frames;
+
+        // nothing to do?
+        if (!frames.length) {
+            return;
+        }
+
+        // new frames go to a new array
+        this.frames = [];
+
+        // sort by iteration for smoother render
+        frames.sort(f => f.iteration);
+
+        // render to canvas
+        const context = this.canvas.current.getContext('2d');
+        frames.forEach(f => context.drawImage(f.bitmap, 0, 0));
+
+        // update throttle limits
+        frames.forEach(f => {
+            const {modelID, workerID, frameIndex} = f;
+            const lastIndex = this.frameIndex[workerID] || 0;
+
+            if (lastIndex < frameIndex) {
+                this.frameIndex[workerID] = frameIndex;
+            }
+
+            // notify workers of new throttle limit
+            const frameLimit = this.frameIndex[workerID] + MandelbrotSet.frameThrottle;
+
+            this.workers[workerID].postMessage({
+                command: 'limit',
+                modelID: modelID,
+                frameLimit: frameLimit,
+            });
+        });
     }
 
     componentDidMount() {
-        this.worker = new Worker('worker.js');
-        this.worker.onmessage = this.workerMessage.bind(this);
-        this.startModel();
+        const workerCount = Math.min(navigator.hardwareConcurrency || 1, 8);
+        this.workers = []
+
+        for (let i = 0; i < workerCount; i++) {
+            const worker = new Worker('worker.js');
+            worker.onmessage = this.workerMessage.bind(this);
+            this.workers.push(worker);
+        }
+
+        this.initiateCanvas();
+        this.workerSubmit();
     }
 
     componentDidUpdate(prevProps, prevState) {
         const { viewBox, resX, resY, frameThrottle } = this.props;
-        const { modelID, frameIndex } = this.state;
+        const { modelID, frameCount } = this.state;
 
         // new model required?
         const modelChanged = viewBox != prevProps.viewBox
             || resX != prevProps.resX
             || resY != prevProps.resY;
-        modelChanged && this.startModel();
+
+        if (modelChanged) {
+            this.initiateCanvas();
+            this.workerSubmit();
+        }
 
         // paint a new frame to the canvas
-        if (!modelChanged && frameIndex != prevState.frameIndex) {
-            this.paint();
-
-            // issue update to worker to increase frame limit
-            this.worker.postMessage({
-                command: 'frameLimit',
-                modelID: modelID,
-                frameLimit: frameIndex + frameThrottle,
-            });
+        if (!modelChanged && frameCount != prevState.frameCount) {
+            this.flushFrames();
         }
     }
 
     componentWillUnmount() {
-        this.worker && this.worker.terminate();
-        this.worker = null;
+        this.workers && this.workers.forEach(w => w.terminate());
+        this.workers = null;
     }
 }
 
@@ -414,7 +459,7 @@ class Sampler extends React.Component {
         // generate sample
         // should be quick enough to be in here in render
         const sample = mbSample(c, maxIterations);
-        const escaped = sample.escape === true; // allow undetermined as in the set
+        const escaped = !sample.undetermined && sample.escapeAge;
         const escapedClass = escaped ? "sampler-escaped" : "sampler-bounded";
 
         const polyLine = sample.zi.map(zi => `${zi.re},${zi.im}`).join(' ');
@@ -463,7 +508,7 @@ class Sampler extends React.Component {
                         <span className={escapedClass}>
                             {escaped ? ` escapes ` : " remains bounded"}
                         </span>
-                        {escaped ? `at n=${sample.age}` : ""}
+                        {escaped ? `at n=${sample.escapeAge}` : ""}
                     </p>
                 </div>
             </div>
@@ -589,7 +634,7 @@ class Selector extends React.Component {
 
             if (eventInDiv) {
                 const bg = this.boxGeometry(clickedPoint, currentPoint);
-                const bgBox = {left: 0, top: 0, width: divRect.width, height: divRect.height};
+                const bgBox = { left: 0, top: 0, width: divRect.width, height: divRect.height };
 
                 if (bg.width > 10 && bg.height > 10) {
                     const subViewBox = parseViewBox(parseViewBox(viewBox).transform(bgBox, bg)).toString();

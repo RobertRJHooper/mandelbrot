@@ -6,135 +6,122 @@ importScripts(
   'model.js'
 );
 
-class ModelTerminatedException extends Error {
-  constructor(reason) {
-    super(reason);
-    this.name = "ModelTerminatedException";
-  }
-}
 
 // minmum period between image posts
-const frameThrottlePeriod = 200;
-
-// info on current model running
-var currentModelPack = null;
+const frameThrottlePeriod = 250;
 
 class ModelPack {
-  constructor(modelID, resX, resY, view, frameLimit) {
+  constructor(modelID, workerID, resX, resY, view, step, offset, frameLimit) {
     this.modelID = modelID;
+    this.workerID = workerID;
+    this.resX = resX;
+    this.resY = resY;
+    this.view = view;
+    this.step = step;
+    this.offset = offset;
 
-    this.model = new MandelbrotGrid(resX, resY, view);
+    this.model = null;
+    this.terminate = false;
+    this.frameLimit = frameLimit;
+  }
+
+  initiate() {
+    const { resX, resY, view, step, offset } = this;
+    this.model = new MandelbrotGrid(resX, resY, view, step, offset);
     this.model.initiate();
 
     this.iteration = 0;
-    this.maxIterations = 1000;
-    
-    // create image and initialise (alpha component mainly)
-    this.image = new ImageData(resX, resY);
-    this.image.data.fill(255);
-
-    // throttling information about the last frame issued
-    this.frameLimit = frameLimit;
-    this.frameIndex = null;
+    this.frameIndex = 0;
     this.frameTime = null;
-
-    // termination info
-    this.terminate = false;
   }
 
-  loop() {
-    new Promise((resolve, reject) => {
-      const { modelID, model, terminate, maxIterations, frameIndex, frameLimit, frameTime } = this;
+  checkThrottle(t) {
+    const { frameIndex, frameLimit, frameTime } = this;
 
-      if (terminate) {
-        return reject(new ModelTerminatedException('model pack terminated'));
-      }
+    if (frameIndex >= frameLimit) {
+      return true;
+    }
 
-      if (this.iteration >= maxIterations) {
-        return reject(new ModelTerminatedException('iteration limit reached', modelID));
-      }
+    if (frameTime && (t < frameTime + frameThrottlePeriod)) {
+      return true;
+    }
 
-      // update the model and paint updates to image buffer
-      //console.time('model.iterate()');
-      model.iterate();
-      this.iteration += 1;
-      //console.timeEnd('model.iterate()');
-      model.paint(this.image);
+    return false;
+  }
 
-      // determine if we can send a frame
-      const now = Date.now();
-      let throttle = frameIndex && (frameIndex + 1 >= frameLimit)
-        || frameTime && (now < frameTime + frameThrottlePeriod);
+  async loop() {
+    if (this.terminate) {
+      console.log(this.modelID, this.workerID, 'model calculation terminated');
+      return;
+    }
 
-      // if it's the last iteration then we send always
-      if (this.iteration == maxIterations - 1) {
-        throttle = false;
-      }
+    if(!this.model.live.length) {
+      console.log(this.modelID, this.workerID, 'no remaining live points, model terminated');
+      return;
+    }
 
-      // update counters and generate frame bitmap
-      if (!throttle) {
-        this.frameIndex += 1;
-        this.frameTime = now;
-        resolve(createImageBitmap(this.image));
-      } else {
-        resolve();
-      }
-    }).then((frameBitmap) => {
-      if (frameBitmap) {
-        // post the bitmap if there is one (not throttled)
-        const message = {
-          modelID: this.modelID,
-          frameBitmap: frameBitmap,
-          frameIndex: this.frameIndex,
-          frameLimit: this.frameLimit
-        };
-        postMessage(message, [frameBitmap]);
-      }
-    }).then(() => {
-      if (this.iteration % 5 == 1) {
-        // compact the model so future iterations are quicker
-        this.model.compact();
-      }
+    this.model.iterate();
+    this.iteration += 1;
 
-      // loop the loop
-      setTimeout(() => this.loop());
-    }).catch(error => {
-      if (error instanceof ModelTerminatedException) {
-        console.debug(this.modelID, "loop ended with message:", error.message);
-      } else {
-        console.error(error);
-      }
-    });
+    // post a frame if the throttle doesn't bite
+    const timestamp = Date.now();
+
+    if (!this.checkThrottle(timestamp)) {
+      const bitmap = await createImageBitmap(this.model.image);
+
+      postMessage({
+        modelID: this.modelID,
+        workerID: this.workerID,
+        iteration: this.iteration,
+        frameIndex: this.frameIndex,
+        bitmap: bitmap,
+      }, [bitmap]);
+
+      this.frameIndex += 1;
+      this.frameTime = timestamp;
+    }
+
+    // loop the loop
+    setTimeout(() => this.loop());
   }
 }
+
+// info on current model running
+var currentModelPack = null;
 
 // incoming message handler
 onmessage = function (e) {
   const command = e.data.command;
 
-  if (command == "init") {
-    if (currentModelPack) {
-      console.log(currentModelPack.modelID, "marking model pack for termination");
-      currentModelPack.terminate = true;
-      currentModelPack = null;
+  switch (command) {
+    case 'initiate': {
+      if (currentModelPack) {
+        currentModelPack.terminate = true;
+        currentModelPack = null;
+      }
+
+      console.log(e.data.modelID, e.data.workerID, 'running model in worker');
+      const { modelID, workerID, resX, resY, view, step, offset, frameLimit } = e.data;
+      const modelPack = new ModelPack(modelID, workerID, resX, resY, view, step, offset, frameLimit);
+
+      // run the iteration loop
+      currentModelPack = modelPack;
+      modelPack.initiate();
+      modelPack.loop();
+      break;
     }
 
-    const { modelID, resX, resY, view, frameLimit } = e.data;
-    console.log(modelID, 'running model in worker');
-    const modelPack = new ModelPack(modelID, resX, resY, view, frameLimit);
+    case 'limit': {
+      const { modelID, frameLimit } = e.data;
 
-    // run the iteration loop
-    currentModelPack = modelPack;
-    modelPack.loop();
-  } else if (command == "frameLimit") {
-    const { modelID, frameLimit } = e.data;
+      if (currentModelPack.modelID == modelID) {
+        currentModelPack.frameLimit = frameLimit;
+      }
 
-    if (currentModelPack.modelID == modelID) {
-      currentModelPack.frameLimit = frameLimit;
-    } else {
-      throw new ValueError('command of non-current model', modelID);
+      break;
     }
-  } else {
-    throw new ValueError('unknown worker command received', command);
+
+    default:
+      throw new ValueError('unknown worker command received', command);
   }
 }

@@ -44,62 +44,48 @@ function mbIterate(z, c) {
 class Point {
   static zero = math.complex(0, 0);
 
-  constructor(c, checkFormula = true) {
+  constructor(c) {
     this.c = c;
     this.z = Point.zero;
     this.age = 0;
+    this.escapeAge = null;
 
-    // escape has three values
-    // true: escape happended at the given age
-    // false: escape will never happen (determined externally by formula)
-    // null: escape undetermined so far at this age
-    this.escape = null;
+    // we can know by formula that some values series remain bounded
+    this.boundedByFormula = mbInPrimary(c) || mbInSecondary(c);
 
-    // formula checks
-    if (checkFormula) {
-      if (mbInPrimary(c) || mbInSecondary(c)) {
-        this.escape = false;
-      }
-    }
-  }
-
-  undetermined() {
-    return this.escape === null;
+    // flag whether the point is determined yet
+    this.undetermined = !this.boundedByFormula;
   }
 
   iterate() {
-    if (this.undetermined()) {
-      const zNext = mbIterate(this.z, this.c);
+    this.z = mbIterate(this.z, this.c);
+    this.age += 1;
 
-      this.age += 1;
-      this.z = zNext;
-
-      if (mbEscaped(zNext)) {
-        this.escape = true;
-      }
+    if (this.undetermined && mbEscaped(this.z)) {
+      this.escapeAge = this.age;
+      this.undetermined = false;
     }
   }
 }
 
 // give the complex numbers of a particular point to escape
-function mbSample(c, maxIterations = 100) {
-  const point = new Point(c, false);
+function mbSample(c, iterations = 100) {
+  const point = new Point(c);
 
   // runout of points
   const zi = [];
 
   // run to escape of max iterations
-  while (point.undetermined() && point.age < maxIterations) {
+  while (point.age < iterations) {
     zi.push(point.z);
     point.iterate();
+
+    if (point.escapeAge && point.escapeAge + 1 < point.age) {
+        break;
+    }
   }
 
-  // add an extra iteration after the escape point
-  if (point.age < maxIterations) {
-    zi.push(mbIterate(point.c, point.z));
-  }
-
-  // append info to point and return
+  // append info to point
   point.zi = zi;
   return point;
 }
@@ -169,10 +155,19 @@ function ageToRGB(age) {
 }
 
 class MandelbrotGrid {
-  constructor(width, height, view) {
+  constructor(width, height, view, step = 4, offset = 0) {
     this.width = width;
     this.height = height;
+
     this.view = view;
+    this.image = null;
+
+    // step and offset are used to only consider
+    // a portion of the points so we can have
+    // multiple grids on different cpus
+    // working on one view
+    this.step = step;
+    this.offset = offset;
 
     // flat list of all points
     this.points = null;
@@ -182,64 +177,64 @@ class MandelbrotGrid {
     this.live = null;
   }
 
-  initiate() {
-    const { width, height, view } = this;
+  initiateImage() {
+    const { width, height, step, offset } = this;
+    this.image = new ImageData(width, height);
 
-    function newPoint(x, y) {
-      const c = gridToValue(width, height, view, x, y);
-      const point = new Point(c);
+    // set alpha channel to opaque for relevant pixels
+    const imageData = this.image.data;
 
-      // add extra info to point structure
-      point.idx = y * width + x;
-      point.x = x;
-      point.y = y;
-
-      return point;
+    for (let i = 4 * offset + 3; i < this.image.data.length; i += 4 * step) {
+      imageData[i] = 255;
     }
+  }
 
+  initiatePoints() {
+    const { width, height, step, offset, view } = this;
     const points = [];
+
+    // this could be vectorised for speed
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        points.push(newPoint(x, y));
+        const idx = y * width + x;
+
+        // filter to relevant subset of points
+        if (idx % step != offset) {
+          continue;
+        }
+
+        const point = new Point(gridToValue(width, height, view, x, y));
+        point.idx = idx;
+        point.x = x;
+        point.y = y;
+        points.push(point);
       }
     }
 
     this.points = points;
-    this.live = points;
+    this.live = points.filter(p => p.undetermined);
+  }
+
+  initiate() {
+    this.initiateImage();
+    this.initiatePoints();
   }
 
   iterate() {
-    this.live.forEach(p => p.iterate());
-  }
+    const [live, determined] = _.partition(this.live, p => (p.iterate() || p.undetermined));
 
-  // update the image with the new model data of live points
-  // The image must be painted before a compact
-  paint(image) {
-    const data = image.data;
+    // colour newly determined points
+    const imageData = this.image.data;
 
-    for (const point of this.live) {
-      const idx = point.idx * 4;
-      const { escape, age } = point;
+    determined.forEach((point) => {
+      const offset = point.idx * 4;
+      const rgb = ageToRGB(point.escapeAge);
+      imageData[offset + 0] = rgb[0];
+      imageData[offset + 1] = rgb[1];
+      imageData[offset + 2] = rgb[2];
+    });
 
-      if (escape === null) {
-        data[idx + 0] = 0;
-        data[idx + 1] = 0;
-        data[idx + 2] = 0;
-      } else if (escape) {
-        const rgb = ageToRGB(age);
-        data[idx + 0] = rgb[0];
-        data[idx + 1] = rgb[1];
-        data[idx + 2] = rgb[2];
-      } else {
-        data[idx + 0] = 255;
-        data[idx + 1] = 0;
-        data[idx + 2] = 255;
-      }
-    }
-  }
-
-  // update live list
-  compact() {
-    this.live = this.live.filter(p => p.undetermined());
+    // update live list
+    this.live = live;
   }
 }
