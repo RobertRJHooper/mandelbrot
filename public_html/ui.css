@@ -83,16 +83,14 @@
     position: absolute;
     top: 0;
     right: 0;
-    direction: rtl;
-
-    list-style-type: none;
     margin: 0.5em;
     padding: 0;
+
+    display: flex;
+    flex-direction: row;
 }
 
-.navbar-li {
-    display: inline-block;
-    text-align: center;
+.navbar-item {
     margin: 0.5em;
     padding: 0.25em;
 
@@ -102,20 +100,21 @@
     color: black;
 }
 
-.navbar-li:hover {
+.navbar-item:hover {
     background-color: white;
     border: 2px solid white;
 }
 
-.navbar-li-active {
+.navbar-item-active {
     border-color: black;
 }
 
-.navbar-li-active:hover {
+.navbar-item-active:hover {
     border-color: black;
 }
 
 .navbar-icon {
+    display: block;
     width: 1em;
     height: 1em;
 }

@@ -22,7 +22,7 @@ class ModelPack {
 
     this.model = null;
     this.initiated = false;
-    this.terminate = false;
+    this.idle = false;
 
     this.frameLimit = frameLimit;
     this.iterationsLimit = iterationsLimit;
@@ -56,7 +56,7 @@ class ModelPack {
 
   async postFrame(timestamp) {
     const bitmap = await createImageBitmap(this.model.image);
-    
+
     // update last frame status
     this.frameIndex = (this.frameIndex || 0) + 1;
     this.frameIteration = this.iteration;
@@ -71,7 +71,7 @@ class ModelPack {
       bitmap: bitmap,
     }, [bitmap]);
 
-    
+
     if (this.workerID == 0) {
       const points = _.sortBy(this.model.points, p => (p.escapeAge || 0));
 
@@ -82,29 +82,30 @@ class ModelPack {
 
   // do the next piece of work
   async work() {
-    if(!this.initiated) {
+    if (!this.initiated) {
       this.initiate();
       return;
     }
 
-    if(!this.model.live.length) {
-      console.log(this.modelID, this.workerID, 'no remaining live points, model terminated');
-      this.terminate = true;
+    if (!this.model.live.length) {
+      console.log(this.modelID, this.workerID, 'no remaining live points, model idling');
+      this.idle = true;
+    }
+
+    if (this.iteration >= this.iterationsLimit) {
+      console.log(this.modelID, this.workerID, 'iteration limit reached, model idling');
+      this.idle = true;
       return;
     }
 
-    if(this.iteration >= this.iterationsLimit) {
-      console.log(this.modelID, this.workerID, 'iteration limit reached, terminating');
-      this.terminate = true;
-      return;
+    if (!this.idle) {
+      this.model.iterate();
+      this.iteration += 1;
     }
 
-    this.model.iterate();
-    this.iteration += 1;
-    
     // post frame if something has changed
     // and the throttle doesn't bite
-    if(this.frameIteration !== this.iteration) {
+    if (this.frameIteration !== this.iteration) {
       const timestamp = Date.now();
 
       if (!this.isFrameThrottled(timestamp)) {
@@ -121,7 +122,7 @@ var currentModelPack = null;
 async function loop() {
   const modelPack = currentModelPack;
 
-  if(modelPack && !modelPack.terminate) {
+  if (modelPack && !modelPack.idle) {
     await modelPack.work();
   } else {
     await new Promise(resolve => setTimeout(resolve, 100)); // snooze
@@ -142,11 +143,20 @@ onmessage = function (e) {
 
     case 'limit': {
       const modelPack = currentModelPack;
-      const { modelID, frameLimit, iterationsLimit } = e.data;
+      const { modelID, frameLimit, iterationsLimit, idle } = e.data;
 
       if (modelPack.modelID == modelID) {
-        modelPack.frameLimit = Math.max(frameLimit, currentModelPack.frameLimit);
-        modelPack.iterationsLimit = iterationsLimit;
+        if (typeof frameLimit != "undefined") {
+          modelPack.frameLimit = Math.max(frameLimit, currentModelPack.frameLimit);
+        }
+
+        if (typeof iterationsLimit != "undefined") {
+          modelPack.iterationsLimit = iterationsLimit;
+        }
+        
+        if (typeof idle != "undefined") {
+          modelPack.idle = idle;
+        }
       }
 
       break;

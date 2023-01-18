@@ -654,8 +654,8 @@ class Navbar extends React.Component {
 
     render() {
         return (
-            <ul className="navbar">
-                <li className="navbar-li"
+            <div className="navbar">
+                <div className="navbar-item"
                     onMouseDown={() => this.setState({ highlightResetButton: true })}
                     onMouseUp={() => this.setState({ highlightResetButton: false })}
                     onClick={this.props.onResetClick}>
@@ -664,15 +664,15 @@ class Navbar extends React.Component {
                         <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.707 1.5Z" />
                         <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293l6-6Z" />
                     </svg>
-                </li>
-                <li className={this.props.sampleButtonActivated ? "navbar-li navbar-li-active" : "navbar-li"}
+                </div>
+                <div className={this.props.sampleButtonActivated ? "navbar-item navbar-item-active" : "navbar-item"}
                     onClick={this.props.onSampleToggle}>
                     {/* cursor icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
                     </svg>
-                </li>
-                <li className="navbar-li">
+                </div>
+                <div className="navbar-item">
                     <div className={this.props.workInProgress ? "navbar-icon-working" : ""}>
                         {/* fan icon */}
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
@@ -680,15 +680,15 @@ class Navbar extends React.Component {
                             <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14Zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16Z" />
                         </svg>
                     </div>
-                </li>
-                <li className="navbar-li"
+                </div>
+                <div className="navbar-item"
                     onClick={() => this.props.onInfoButtonClick()}>
                     {/* info icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="m9.708 6.075-3.024.379-.108.502.595.108c.387.093.464.232.38.619l-.975 4.577c-.255 1.183.14 1.74 1.067 1.74.72 0 1.554-.332 1.933-.789l.116-.549c-.263.232-.65.325-.905.325-.363 0-.494-.255-.402-.704l1.323-6.208Zm.091-2.755a1.32 1.32 0 1 1-2.64 0 1.32 1.32 0 0 1 2.64 0Z" />
                     </svg>
-                </li>
-            </ul>
+                </div>
+            </div>
 
         );
     }
