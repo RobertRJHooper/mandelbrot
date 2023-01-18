@@ -120,6 +120,16 @@
     height: 1em;
 }
 
+.navbar-icon-working {
+    animation: rotation 2s infinite linear;
+}
+
+@keyframes rotation {
+    to {
+        transform: rotate(1turn);
+    }
+}
+
 .info-modal {
     position: absolute;
     box-sizing: border-box;
