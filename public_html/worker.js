@@ -72,12 +72,14 @@ class ModelPack {
     }, [bitmap]);
 
 
+    /*
     if (this.workerID == 0) {
       const points = _.sortBy(this.model.points, p => (p.escapeAge || 0));
 
       const p = points[points.length - 1];
       console.log(this.iteration, p.escapeAge, p.c);
     }
+    */
   }
 
   // do the next piece of work

@@ -1,5 +1,6 @@
 "use strict";
 
+/* viewbox defined by bottom left corner and a width and an height */
 class ViewBox {
     constructor(box) {
         if (typeof box == "string") {
@@ -12,19 +13,18 @@ class ViewBox {
             const [left, bottom, width, height] = arr;
 
             this.left = left;
-            this.right = left + width;
             this.bottom = bottom;
-            this.top = bottom + height;
             this.width = width;
             this.height = height;
-        } else {
+         } else {
             this.left = box.left;
-            this.top = box.top;
+            this.bottom = box.bottom;
             this.width = box.width;
             this.height = box.height;
-            this.right = box.left + box.width;
-            this.bottom = box.top - box.height;
         }
+
+        this.right = this.left + this.width;
+        this.top = this.bottom + this.height;
     }
 
     toString() {
@@ -60,16 +60,16 @@ class ViewBox {
         if (dimensionToAdjust == "width") {
             const width = this.height * rectAspectRatio;
             return new ViewBox({
-                top: this.top,
                 left: this.left + this.width / 2 - width / 2,
+                bottom: this.bottom,
                 height: this.height,
                 width: width,
             });
         } else {
             const height = this.width / rectAspectRatio;
             return new ViewBox({
-                top: this.top - this.height / 2 + height / 2,
                 left: this.left,
+                bottom: this.bottom + this.height / 2 - height / 2,
                 height: height,
                 width: this.width,
             });
@@ -127,15 +127,39 @@ class ViewBox {
 /* cached view box parsing */
 const parseViewBox = _.memoize(box => (box instanceof ViewBox ? box : new ViewBox(box)));
 
+/* set viewbox as specified in the URL for a viewbox */
+function setURLViewBox(viewBox) {
+    const url = new URL(window.location);
+    const {left, bottom, width, height} = parseViewBox(viewBox);
+    url.searchParams.set('x', left);
+    url.searchParams.set('y', bottom);
+    url.searchParams.set('dx', width);
+    url.searchParams.set('dy', height);
+    window.history.pushState({}, '', url);
+}
+
+/* get viewbox as specified in the URL, or return null */
+function getURLViewBox() {
+    const searchParams = new URL(window.location).searchParams;
+    const [left, bottom, width, height] = ['x', 'y', 'dx', 'dy'].map(n => Number(searchParams.get(n)));
+
+    // some value is missing?
+    if([left, bottom, width, height].some(isNaN)) {
+        return null;
+    }
+
+    return new ViewBox({left: left, bottom: bottom, width: width, height: height});
+}
 
 class App extends React.Component {
-    static initialViewBox = "-2 -2 4 4";
-
+    static resetViewBox = "-2 -2 4 4";
+    static defaultViewBox = "-2 -2 4 4";
+    
     constructor(props) {
         super(props);
 
         this.state = {
-            viewBox: App.initialViewBox,
+            viewBox: this.getInitialViewBox(),
             containerDimensions: null,
 
             infoModalVisible: false,
@@ -201,7 +225,7 @@ class App extends React.Component {
                     sampleButtonActivated={samplerVisible}
                     workInProgress="1"
                     onSampleToggle={() => this.setState({ samplerVisible: !this.state.samplerVisible })}
-                    onResetClick={() => this.setState({ viewBox: App.initialViewBox, infoModalVisible: false })}
+                    onResetClick={() => this.setState({ viewBox: App.resetViewBox, infoModalVisible: false })}
                     onInfoButtonClick={this.onInfoButtonClick} />
 
                 <InfoModal
@@ -222,6 +246,17 @@ class App extends React.Component {
         });
     }
 
+    getInitialViewBox() {
+        const vb = getURLViewBox();
+
+        if (vb && vb.width && vb.height) {
+            return vb.toString();
+        }
+
+        // fall back when nothing proper is specified
+        return App.defaultViewBox;
+    }
+
     componentDidMount() {
         this.resizeObserver.observe(this.container.current);
         this.setDimensions();
@@ -232,6 +267,11 @@ class App extends React.Component {
 
         if (!_.isEqual(prevState.containerDimensions, containerDimensions)) {
             containerDimensions && this.setDimensions();
+        }
+
+        // update the viewbox in the URL
+        if(prevState.viewBox != this.state.viewBox) {
+            setURLViewBox(this.state.viewBox);
         }
     }
 
@@ -566,6 +606,7 @@ class Selector extends React.Component {
     }
 
     // get box dimensions maintaining aspect ration of div container
+    // the box has the usual rectangle coordinate system (vertical increasing downwards)
     boxGeometry(clickedPoint, currentPoint) {
         const rect = {
             left: clickedPoint.x,
@@ -585,6 +626,8 @@ class Selector extends React.Component {
             rect.height *= -1;
         }
 
+        rect.right = rect.left + rect.width;
+        rect.bottom = rect.top + rect.height;
         return rect;
     }
 
@@ -637,7 +680,8 @@ class Selector extends React.Component {
                 const bgBox = { left: 0, top: 0, width: divRect.width, height: divRect.height };
 
                 if (bg.width > 10 && bg.height > 10) {
-                    const subViewBox = parseViewBox(parseViewBox(viewBox).transform(bgBox, bg)).toString();
+                    const subViewRect = parseViewBox(viewBox).transform(bgBox, bg);
+                    const subViewBox = parseViewBox(subViewRect).toString();
                     onBoxSelection(subViewBox);
                 }
             }
