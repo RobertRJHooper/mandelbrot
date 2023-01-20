@@ -40,6 +40,11 @@ class ModelPack {
     this.initiated = true;
   }
 
+  // return if there have been udpates since the last posted frame
+  dirty() {
+    return this.frameIteration !== this.iteration;
+  }
+
   isFrameThrottled(timestamp) {
     const { frameIndex, frameLimit, frameTime } = this;
 
@@ -92,6 +97,7 @@ class ModelPack {
     if (!this.model.live.length) {
       console.log(this.modelID, this.workerID, 'no remaining live points, model idling');
       this.idle = true;
+      return;
     }
 
     if (this.iteration >= this.iterationsLimit) {
@@ -100,20 +106,8 @@ class ModelPack {
       return;
     }
 
-    if (!this.idle) {
-      this.model.iterate();
-      this.iteration += 1;
-    }
-
-    // post frame if something has changed
-    // and the throttle doesn't bite
-    if (this.frameIteration !== this.iteration) {
-      const timestamp = Date.now();
-
-      if (!this.isFrameThrottled(timestamp)) {
-        await this.postFrame(timestamp);
-      }
-    }
+    this.model.iterate();
+    this.iteration += 1;
   }
 }
 
@@ -124,6 +118,17 @@ var currentModelPack = null;
 async function loop() {
   const modelPack = currentModelPack;
 
+  // post frame if something has changed
+  // and the throttle doesn't bite
+  if(modelPack && modelPack.dirty()) {
+    const timestamp = Date.now();
+
+    if (!modelPack.isFrameThrottled(timestamp)) {
+      await modelPack.postFrame(timestamp);
+    }
+  }
+
+  // do work
   if (modelPack && !modelPack.idle) {
     await modelPack.work();
   } else {

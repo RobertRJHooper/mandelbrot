@@ -16,9 +16,9 @@ function mbInPrimary(c) {
   }
 
   // full calculation
-  // modulus(sqrt(1-4c) - 1) < 1
-  const z = math.add(math.sqrt(math.add(math.multiply(c, -4), 1)), -1);
-  return math.abs(z) < 0.9999;
+  const z = math.sqrt(math.complex(-4 * c.re + 1, -4 * c.im));
+  z.re = z.re - 1;
+  return z.re * z.re + z.im * z.im < 0.9999;
 }
 
 // is the point in the secondary circle when zn has period two in limit?
@@ -35,18 +35,14 @@ function mbEscaped(z) {
 
 function mbIterate(z, c) {
   const { re, im } = z;
-
-  return math.complex(
-    re * re - im * im + c.re,
-    2 * re * im + c.im);
+  z.re = re * re - im * im + c.re;
+  z.im = 2 * re * im + c.im;
 }
 
 class Point {
-  static zero = math.complex(0, 0);
-
   constructor(c) {
     this.c = c;
-    this.z = Point.zero;
+    this.z = math.complex(0, 0);
     this.age = 0;
     this.escapeAge = null;
 
@@ -58,7 +54,7 @@ class Point {
   }
 
   iterate() {
-    this.z = mbIterate(this.z, this.c);
+    mbIterate(this.z, this.c);
     this.age += 1;
 
     if (this.undetermined && mbEscaped(this.z)) {
@@ -77,7 +73,7 @@ function mbSample(c, iterations = 100) {
 
   // run to escape of max iterations
   while (point.age < iterations) {
-    zi.push(point.z);
+    zi.push(math.complex(point.z));
     point.iterate();
 
     if (point.escapeAge && point.escapeAge + 1 < point.age) {
@@ -155,7 +151,7 @@ function ageToRGB(age) {
 }
 
 class MandelbrotGrid {
-  constructor(width, height, view, step = 4, offset = 0) {
+  constructor(width, height, view, step = 1, offset = 0) {
     this.width = width;
     this.height = height;
 
@@ -212,7 +208,7 @@ class MandelbrotGrid {
     }
 
     this.points = points;
-    this.live = points.filter(p => p.undetermined);
+    this.live = points;
   }
 
   initiate() {
@@ -228,10 +224,17 @@ class MandelbrotGrid {
 
     determined.forEach((point) => {
       const offset = point.idx * 4;
-      const rgb = ageToRGB(point.escapeAge);
-      imageData[offset + 0] = rgb[0];
-      imageData[offset + 1] = rgb[1];
-      imageData[offset + 2] = rgb[2];
+
+      if(point.escapeAge) {
+        const rgb = ageToRGB(point.escapeAge);
+        imageData[offset + 0] = rgb[0];
+        imageData[offset + 1] = rgb[1];
+        imageData[offset + 2] = rgb[2];
+      } else {
+        imageData[offset + 0] = 0;
+        imageData[offset + 1] = 0;
+        imageData[offset + 2] = 0;
+      }
     });
 
     // update live list

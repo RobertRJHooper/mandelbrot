@@ -1,9 +1,8 @@
 Features to make:
-touch zooming, double tap unzoom
+image deltas - panning and zooming - by mouse, touch and mouse box selection
 trace stick on click
 high precision numbers
-url anchoring to center and resolution
-observer to resize on canvas change with debounce
+in place complex iteration and other calculations
 
 maybes:
 test in safari
@@ -16,6 +15,8 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+observer to resize on canvas change with debounce
+url anchoring to center and resolution
 iterations limiting with idling
 use memoization to improve performance of viewBox parsing
 box only on left click
