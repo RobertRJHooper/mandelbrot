@@ -87,25 +87,15 @@ function mbSample(c, iterations = 100) {
 }
 
 // helper to get the complex value of an (x, y) point in the grid
-function gridToValue(width, height, view, x, y) {
-  const fx = (x + 0.5) / width;
-  const fy = (y + 0.5) / height;
-
-  return math.complex(
-    view.topLeft.re + fx * view.width,
-    view.topLeft.im - fy * view.height,
-  );
+function gridToValue(center, resolution, width, height, i, j) {
+  const dx = (i - (width - 1) / 2) / resolution;
+  const dy = (j - (height - 1) / 2) / resolution;
+  return math.complex(center.re + dx, center.im + dy);
 }
 
 // helper to get the (x, y) point in the grid from a complex point
 function valueToGrid(width, height, view, z) {
-  const fx = (z.re - view.topLeft.re) / width;
-  const fy = (view.topLeft.im - z.im) / height;
-
-  return {
-    x: math.round(fx * width - 0.5),
-    y: math.round(fy * height - 0.5),
-  };
+  throw Error('not implemented');
 }
 
 /**
@@ -151,11 +141,11 @@ function ageToRGB(age) {
 }
 
 class MandelbrotGrid {
-  constructor(width, height, view, step = 1, offset = 0) {
+  constructor(center, resolution, width, height, step = 1, offset = 0) {
+    this.center = center;
+    this.resolution = resolution;
     this.width = width;
     this.height = height;
-
-    this.view = view;
     this.image = null;
 
     // step and offset are used to only consider
@@ -175,34 +165,36 @@ class MandelbrotGrid {
 
   initiateImage() {
     const { width, height, step, offset } = this;
-    this.image = new ImageData(width, height);
 
-    // set alpha channel to opaque for relevant pixels
+    this.image = new ImageData(width, height);  
     const imageData = this.image.data;
-
-    for (let i = 4 * offset + 3; i < this.image.data.length; i += 4 * step) {
-      imageData[i] = 255;
+    const imageDataLength = this.image.data.length;
+    const stride = 4 * step;
+    
+    for (let i = 4 * offset; i < imageDataLength; i += stride) {
+      imageData[i + 0] = 0;
+      imageData[i + 1] = 0;
+      imageData[i + 2] = 0;
+      imageData[i + 3] = 255;
     }
   }
 
   initiatePoints() {
-    const { width, height, step, offset, view } = this;
+    const { center, resolution, width, height, step, offset} = this;
     const points = [];
 
     // this could be vectorised for speed
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const idx = y * width + x;
+    for (let j = 0; j < height; j++) {
+      for (let i = 0; i < width; i++) {
+        const idx = j * width + i;
 
         // filter to relevant subset of points
         if (idx % step != offset) {
           continue;
         }
 
-        const point = new Point(gridToValue(width, height, view, x, y));
+        const point = new Point(gridToValue(center, resolution, width, height, i, j));
         point.idx = idx;
-        point.x = x;
-        point.y = y;
         points.push(point);
       }
     }
@@ -216,6 +208,7 @@ class MandelbrotGrid {
     this.initiatePoints();
   }
 
+  // iterals all live points and returns true iff the image changed
   iterate() {
     const [live, determined] = _.partition(this.live, p => (p.iterate() || p.undetermined));
 
@@ -223,21 +216,28 @@ class MandelbrotGrid {
     const imageData = this.image.data;
 
     determined.forEach((point) => {
-      const offset = point.idx * 4;
+      const i = point.idx * 4;
 
-      if(point.escapeAge) {
+      if(point.escapeAge !== null) {
         const rgb = ageToRGB(point.escapeAge);
-        imageData[offset + 0] = rgb[0];
-        imageData[offset + 1] = rgb[1];
-        imageData[offset + 2] = rgb[2];
+        imageData[i + 0] = rgb[0];
+        imageData[i + 1] = rgb[1];
+        imageData[i + 2] = rgb[2];
+      } else if (point.boundedByFormula) {
+        imageData[i + 0] = 255;
+        imageData[i + 1] = 0;
+        imageData[i + 2] = 255;
       } else {
-        imageData[offset + 0] = 0;
-        imageData[offset + 1] = 0;
-        imageData[offset + 2] = 0;
+        imageData[i + 0] = 0;
+        imageData[i + 1] = 0;
+        imageData[i + 2] = 0;
       }
     });
 
     // update live list
     this.live = live;
+
+    // return true if pixels were updated
+    return determined.length;
   }
 }

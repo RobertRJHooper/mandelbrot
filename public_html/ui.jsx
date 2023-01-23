@@ -16,7 +16,7 @@ class ViewBox {
             this.bottom = bottom;
             this.width = width;
             this.height = height;
-         } else {
+        } else {
             this.left = box.left;
             this.bottom = box.bottom;
             this.width = box.width;
@@ -130,7 +130,7 @@ const parseViewBox = _.memoize(box => (box instanceof ViewBox ? box : new ViewBo
 /* set viewbox as specified in the URL for a viewbox */
 function setURLViewBox(viewBox) {
     const url = new URL(window.location);
-    const {left, bottom, width, height} = parseViewBox(viewBox);
+    const { left, bottom, width, height } = parseViewBox(viewBox);
     url.searchParams.set('x', left);
     url.searchParams.set('y', bottom);
     url.searchParams.set('dx', width);
@@ -144,17 +144,17 @@ function getURLViewBox() {
     const [left, bottom, width, height] = ['x', 'y', 'dx', 'dy'].map(n => Number(searchParams.get(n)));
 
     // some value is missing?
-    if([left, bottom, width, height].some(isNaN)) {
+    if ([left, bottom, width, height].some(isNaN)) {
         return null;
     }
 
-    return new ViewBox({left: left, bottom: bottom, width: width, height: height});
+    return new ViewBox({ left: left, bottom: bottom, width: width, height: height });
 }
 
 class App extends React.Component {
     static resetViewBox = "-2 -2 4 4";
     static defaultViewBox = "-2 -2 4 4";
-    
+
     constructor(props) {
         super(props);
 
@@ -270,7 +270,7 @@ class App extends React.Component {
         }
 
         // update the viewbox in the URL
-        if(prevState.viewBox != this.state.viewBox) {
+        if (prevState.viewBox != this.state.viewBox) {
             setURLViewBox(this.state.viewBox);
         }
     }
@@ -299,29 +299,34 @@ class App extends React.Component {
 }
 
 class MandelbrotSet extends React.Component {
-    static maxWorkerCount = 32;
+    static maxWorkerCount = 8;
     static frameThrottle = 5;
     static iterationsLimit = 4000;
-    static modelDebounce = 400;
 
     static defaultProps = {
-        viewBox: "-2 -2 4 4",
-        resX: 200,
-        resY: 200,
+        centerX: 0,
+        centerY: 0,
+
+        // pixels per unit length of imaginary plane
+        resolution: 100,
+
+        // canvas dimensions in pixels
+        width: 400,
+        height: 400,
     }
 
     constructor(props) {
         super(props);
 
         this.state = {
-            modelID: null,
-            frameCounter: 0, // used to notify that new frames have arrived
+            workReference: null,
+            frameCount: 0,
         }
 
         this.canvas = React.createRef();
         this.workers = null;
 
-        // unprocessed frames from workers
+        // unprocessed frames of panels from workers
         this.frames = [];
     }
 
@@ -329,58 +334,50 @@ class MandelbrotSet extends React.Component {
         return (
             <canvas
                 ref={this.canvas}
-                width="0"
-                height="0"
+                width={this.props.width}
+                height={this.props.height}
                 className="mandelbrotset">
             </canvas>
         );
     }
 
     initiateCanvas() {
-        const { resX, resY } = this.props;
-
         const canvas = this.canvas.current;
-        const canvasWidth = canvas.getAttribute("width");
-        const canvasHeight = canvas.getAttribute("height");
-
-        // check/update canvas
-        if (canvasWidth != resX || canvasHeight != resY) {
-            canvas.setAttribute("width", resX);
-            canvas.setAttribute("height", resY);
-        }
-
-        // clear to black
         const context = canvas.getContext('2d');
+
         context.beginPath();
+        context.fillStyle = "grey";
         context.fillRect(0, 0, canvas.width, canvas.height);
     }
 
     workerStart() {
-        const { resX, resY } = this.props;
-        const viewBox = parseViewBox(this.props.viewBox);
+        const canvas = this.canvas.current;
+        const { centerX, centerY, resolution, width, height } = this.props;
 
         // exclusion checks
-        if (!resX || !resY || !viewBox.width || !viewBox.height) {
+        if (!width || !height) {
             console.log("trivial view, cancelling calculation");
+            this.setState({ workReference: null });
             return;
         }
 
         if (!this.workers || !this.workers.length) {
             console.error("no workers set up");
+            this.setState({ workReference: null });
             return;
         }
 
-        // unique model ID
-        const modelID = Date.now() + "" + Math.floor(Math.random() * 1000000);
-        console.debug(modelID, 'initiating model');
+        // unique work ID
+        const workReference = Date.now() + "" + Math.floor(Math.random() * 1000000);
+        console.debug(workReference, 'initiating workers');
 
         // set local model state
         this.setState({
-            modelID: modelID,
+            workReference: workReference,
             frameCount: 0,
         });
 
-        // blank the canvas
+        // blank and size the canvas
         this.initiateCanvas();
 
         // initiate workers
@@ -388,22 +385,22 @@ class MandelbrotSet extends React.Component {
 
         this.workers.forEach((worker, workerIndex) => {
             worker.postMessage({
-                command: 'initiate',
-                modelID: modelID,
-                workerID: workerIndex,
-
-                resX: resX,
-                resY: resY,
-                view: {
-                    topLeft: math.complex(viewBox.left, viewBox.top),
-                    width: viewBox.width,
-                    height: viewBox.height
-                },
+                command: 'point',
+                workReference: `${workReference} ${workerIndex}`,
+                pointX: centerX,
+                pointY: centerY,
+                resolution: resolution,
+                width: width,
+                height: height,
                 step: workerCount,
                 offset: workerIndex,
+            });
 
+            worker.postMessage({
+                command: 'limit',
                 frameLimit: MandelbrotSet.frameThrottle,
                 iterationsLimit: MandelbrotSet.iterationsLimit,
+                pause: false,
             });
         });
     }
@@ -413,35 +410,50 @@ class MandelbrotSet extends React.Component {
         this.setState((state, props) => ({ frameCount: state.frameCount + 1 }));
     }
 
-    processFrames() {
-        const { modelID } = this.state;
-        let frames = this.frames;
-
-        // future new frames go to a new array
-        this.frames = [];
-
-        // check frames are still relevant
-        frames = frames.filter(f => f.modelID == modelID);
-
-        // sort by iteration for smoother render
-        frames = _.sortBy(frames, f => f.iteration);
-
-        // render to canvas
+    processFrame(frame) {
         const context = this.canvas.current.getContext('2d');
-        frames.forEach(f => context.drawImage(f.bitmap, 0, 0));
+        const [workReference, workerID] = frame.workReference.split(" ");
+
+        // check frame is relevant
+        if (workReference != this.state.workReference) {
+            console.log(frame.workReference, 'frame ignored with mismatching reference');
+            return;
+        }
+
+        // find coordinates of the center of the canvas
+        const cx = Math.floor(this.props.width / 2);
+        const cy = Math.floor(this.props.height / 2);
+
+        // render each panel to canvas
+        frame.snaps.forEach(snap => {
+            const { bitmap, panelX, panelY, x, y } = snap;
+
+            // coordinates on the canvas to draw this panel
+            const canvasX = cx + x;
+            const canvasY = cy + y;
+            context.drawImage(bitmap, canvasX, canvasY);
+        });
+
+        context.beginPath();
+        context.fillStyle = "blue";
+        context.fillRect(cx - 5, cy - 5, 10, 10);
 
         // update throttle limits
-        frames.forEach(f => {
-            const { workerID, index } = f;
-            const frameLimit = index + MandelbrotSet.frameThrottle;
-
-            this.workers[workerID].postMessage({
-                command: 'limit',
-                modelID: modelID,
-                frameLimit: frameLimit,
-                iterationsLimit: MandelbrotSet.iterationsLimit,
-            });
+        this.workers[workerID].postMessage({
+            command: 'limit',
+            frameLimit: frame.index + MandelbrotSet.frameThrottle,
+            iterationsLimit: MandelbrotSet.iterationsLimit,
         });
+    }
+
+    processFrames() {
+        const frames = this.frames;
+
+        // new frames to new buffer
+        this.frames = [];
+
+        // process each frame in iteration order for smoothness
+        _.sortBy(frames, f => f.iteration).forEach(f => this.processFrame(f));
     }
 
     componentDidMount() {
@@ -458,25 +470,24 @@ class MandelbrotSet extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { viewBox, resX, resY, frameThrottle } = this.props;
+        const { centerX, centerY, resolution, width, height } = this.props;
+        const { frameCount } = this.state;
 
         // new model required?
-        const modelChanged = viewBox != prevProps.viewBox
-            || resX != prevProps.resX
-            || resY != prevProps.resY;
+        const modelChanged = centerX != prevProps.centerX
+            || centerY != prevProps.centerY
+            || resolution != prevProps.resolution
+            || width != prevProps.width
+            || height != prevProps.height;
 
         if (modelChanged) {
             this.workerStart();
-        }
-
-        // paint a new frame to the canvas
-        if (!modelChanged && this.state.frameCount != prevState.frameCount) {
+        } else if (frameCount != prevState.frameCount) {
             this.processFrames();
         }
     }
 
     componentWillUnmount() {
-        this.workerSubmitDebounced.cancel();
         this.workers && this.workers.forEach(w => w.terminate());
         this.workers = null;
     }
