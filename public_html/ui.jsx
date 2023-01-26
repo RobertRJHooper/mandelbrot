@@ -1,277 +1,323 @@
 "use strict";
 
-/* viewbox defined by bottom left corner and a width and an height */
-class ViewBox {
-    constructor(box) {
-        if (typeof box == "string") {
-            const arr = box.split(/\s*[\s,]\s*/).map(x => Number.parseFloat(x));
+/* helper to convert pixel coordinates to imaginary plane point */
+function rectToImaginary(center, zoom, width, height, x, y) {
+    return complex(
+        center.re + (x - width / 2) / zoom,
+        center.im - (y - height / 2) / zoom,
+    );
+}
 
-            if (arr.length != 4) {
-                throw new TypeError('four numbers expected for a view box string');
-            }
+/* helper to convert imaginary plane point to pixel coordinates */
+function imaginarytoRect(center, zoom, width, height, point) {
+    return [
+        width / 2 + (point.re - center.re) * zoom,
+        height / 2 - (point.im - center.im) * zoom
+    ];
+}
 
-            const [left, bottom, width, height] = arr;
+/* class to handle model calculations and communication with worker */
+class ModelClient {
+    static maxWorkerCount = 8;
 
-            this.left = left;
-            this.bottom = bottom;
-            this.width = width;
-            this.height = height;
-        } else {
-            this.left = box.left;
-            this.bottom = box.bottom;
-            this.width = box.width;
-            this.height = box.height;
-        }
+    constructor() {
+        this.workers = null;
 
-        this.right = this.left + this.width;
-        this.top = this.bottom + this.height;
+        // current working state
+        this.zoom = null;
+
+        // pixel offset to shift from the origin to the center point
+        // updated when setting center point
+        this.canvasOffsetX = null;
+        this.canvasOffsetY = null;
+
+        // snaps of panels and updated snaps since last flush
+        this.snaps = new Map();
+        this.updates = [];
+
+        // throttling defaults
+        this.frameBudget = 2;
+        this.iterationsLimit = 4000;
+
+        // callback reference
+        this.onUpdate = null;
     }
 
-    toString() {
-        return [this.left, this.bottom, this.width, this.height].map(x => x.toString()).join(' ');
+    initiate() {
+        const workerCount = Math.min(navigator.hardwareConcurrency || 1, ModelClient.maxWorkerCount);
+        console.debug(`initiating model with ${workerCount} workers`);
+
+        this.workers = []
+        for (let i = 0; i < workerCount; i++) {
+            const worker = new Worker('worker.js');
+            worker.onmessage = this.workerMessage.bind(this);
+            this.workers.push(worker);
+        }
     }
 
-    // fit to a rectangle and return the containing new view box
-    // fitting means setting the aspect ratio of the view to equal the box
-    // by extending or contracting the bounding dimensions
-    // fitting can be either: 'cover' or 'contain'
-    // similar to object-fit css property
-    fit(rect, fitting) {
-        const thisAspectRatio = this.width / this.height;
-        const rectAspectRatio = rect.width / rect.height;
+    terminate() {
+        console.debug('terminating model');
+        this.workers && this.workers.forEach(w => w.terminate());
+        this.workers = null;
+    }
 
-        let dimensionToAdjust;
-        if (fitting == "cover") {
-            if (thisAspectRatio > rectAspectRatio) {
-                dimensionToAdjust = "width";
-            } else {
-                dimensionToAdjust = "height";
-            }
-        } else if (fitting == "contain") {
-            if (thisAspectRatio > rectAspectRatio) {
-                dimensionToAdjust = "height";
-            } else {
-                dimensionToAdjust = "width";
-            }
-        } else {
-            throw new ValueError("unrecognised fit value");
+    /* set the center and zoom level in the workers */
+    setZoom(zoom) {
+        if (!this.workers || !this.workers.length) {
+            console.error("no workers set up");
+            return;
         }
 
-        if (dimensionToAdjust == "width") {
-            const width = this.height * rectAspectRatio;
-            return new ViewBox({
-                left: this.left + this.width / 2 - width / 2,
-                bottom: this.bottom,
-                height: this.height,
+        // clear snap caches
+        this.snaps = new Map();
+        this.updates = [];
+
+        // save state locally
+        this.zoom = zoom;
+        this.canvasOffsetX = null;
+        this.canvasOffsetY = null;
+
+        // send to workers
+        this.workers.forEach((worker, workerIndex) => {
+            worker.postMessage({
+                command: 'zoom',
+                zoom: zoom,
+                step: this.workers.length,
+                offset: workerIndex,
+            });
+        });
+    }
+
+    /* set the center in the workers */
+    setCenter(center, width, height) {
+        if (!width || !height) {
+            console.debug("trivial view, nothing to do");
+            return;
+        }
+
+        if (!this.workers || !this.workers.length) {
+            console.error("no workers set up");
+            return;
+        }
+
+        // save working state
+        const { zoom } = this;
+        this.canvasOffsetX = Math.round(width / 2 - center.re * zoom);
+        this.canvasOffsetY = Math.round(height / 2 + center.im * zoom);
+
+        // send center to workers
+        this.workers.forEach(worker => {
+            worker.postMessage({
+                command: 'center',
+                center: center,
                 width: width,
-            });
-        } else {
-            const height = this.width / rectAspectRatio;
-            return new ViewBox({
-                left: this.left,
-                bottom: this.bottom + this.height / 2 - height / 2,
                 height: height,
-                width: this.width,
+            });
+        });
+    }
+
+    workerMessage(message) {
+        const data = message.data;
+        const { zoom } = this;
+        const expired = data.zoom != zoom;
+        
+        console.debug(
+                'frame received with', data.snaps.length, 'snaps.',
+                'adding to', this.updates.length, 'existing updates, and total cached snaps', this.snaps.size
+        );
+
+        if (!expired) {
+            for (const snap of data.snaps) {
+                this.updates.push(snap);
+                this.snaps.set(snap.key, snap);
+            }
+        } else {
+            console.debug("expired snaps received from worker", zoom);
+        }
+
+        // notification callback - needed even if the snaps have expired to reset budget later
+        this.onUpdate && this.onUpdate();
+    }
+
+    /* get all snaps available */
+    full() {
+        return [...this.snaps.values()];
+    }
+
+    /* get updates since last flush */
+    flush() {
+        const snaps = this.updates;
+        this.updates = [];
+        return snaps;
+    }
+
+    // reset frame budget in workers
+    resetBudget() {
+        for (const worker of this.workers) {
+            worker.postMessage({
+                command: 'limit',
+                frameBudget: this.frameBudget,
+                iterationsLimit: this.iterationsLimit,
             });
         }
     }
-
-    /* transform values in a source rectangle coordinate system to the viewbox coordinate system */
-    transform(rect, values, flipVertical = true) {
-        const fx = this.width / rect.width;
-        const fy = this.height / rect.height;
-        const fv = flipVertical ? -1 : 1;
-
-        const out = {};
-
-        if (typeof values.x !== 'undefined') {
-            out.x = this.left + (values.x - rect.left) * fx;
-        }
-
-        if (typeof values.left !== 'undefined') {
-            out.left = this.left + (values.left - rect.left) * fx;
-        }
-
-        if (typeof values.right !== 'undefined') {
-            out.right = this.left + (values.right - rect.left) * fx;
-        }
-
-        if (typeof values.y !== 'undefined') {
-            out.y = this.top + (values.y - rect.top) * fy * fv;
-        }
-
-        if (typeof values.top !== 'undefined') {
-            out.top = this.top + (values.top - rect.top) * fy * fv;
-        }
-
-        if (typeof values.bottom !== 'undefined') {
-            out.bottom = this.top + (values.bottom - rect.top) * fy * fv;
-        }
-
-        if (typeof values.width !== 'undefined') {
-            out.width = values.width * fx;
-        }
-
-        if (typeof values.height !== 'undefined') {
-            out.height = values.height * fy;
-        }
-
-        if ([out.left, out.top, out.width, out.height].map(x => typeof x).every(x => x !== 'undefined')) {
-            return new ViewBox(out);
-        }
-
-        return out;
-    }
 }
 
-/* cached view box parsing */
-const parseViewBox = _.memoize(box => (box instanceof ViewBox ? box : new ViewBox(box)));
-
-/* set viewbox as specified in the URL for a viewbox */
-function setURLViewBox(viewBox) {
-    const url = new URL(window.location);
-    const { left, bottom, width, height } = parseViewBox(viewBox);
-    url.searchParams.set('x', left);
-    url.searchParams.set('y', bottom);
-    url.searchParams.set('dx', width);
-    url.searchParams.set('dy', height);
-    window.history.pushState({}, '', url);
-}
-
-/* get viewbox as specified in the URL, or return null */
-function getURLViewBox() {
-    const searchParams = new URL(window.location).searchParams;
-    const [left, bottom, width, height] = ['x', 'y', 'dx', 'dy'].map(n => Number(searchParams.get(n)));
-
-    // some value is missing?
-    if ([left, bottom, width, height].some(isNaN)) {
-        return null;
-    }
-
-    return new ViewBox({ left: left, bottom: bottom, width: width, height: height });
-}
 
 class App extends React.Component {
-    static resetViewBox = "-2 -2 4 4";
-    static defaultViewBox = "-2 -2 4 4";
+    static defaultView = {
+        center: complex(0),
+        zoom: 200,
+    };
 
     constructor(props) {
         super(props);
 
         this.state = {
-            viewBox: this.getInitialViewBox(),
-            containerDimensions: null,
+            ...App.defaultView,
+            width: 0,
+            height: 0,
+
+            sample: null,
+            sampleVisible: false,
 
             infoModalVisible: false,
-            samplerVisible: false,
-            samplerC: math.complex(0, 0),
         }
 
+        // keep track of container dimensions
         this.container = React.createRef();
-        this.onBoxSelection = this.onBoxSelection.bind(this);
-        this.onPointHover = this.onPointHover.bind(this);
-        this.onInfoButtonClick = () => this.setState({ infoModalVisible: !this.state.infoModalVisible });
-        this.onInfoCloseClick = () => this.setState({ infoModalVisible: false });
 
         this.resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 if (entry.target == this.container.current) {
-                    this.setDimensions();
+                    this.pullContainerDimensions();
                 }
             }
+        });
+
+        this.onBoxSelection = this.onBoxSelection.bind(this);
+        this.onPointHover = this.onPointHover.bind(this);
+        this.onInfoButtonClick = () => this.setState({ infoModalVisible: !this.state.infoModalVisible });
+        this.onInfoCloseClick = () => this.setState({ infoModalVisible: false });
+    }
+
+    /* get viewbox as specified in the URL, or return null */
+    pullURL() {
+        const url = new URL(window.location);
+        const searchParams = url.searchParams;
+
+        return {
+            center: complex(
+                Number(searchParams.get('x')),
+                Number(searchParams.get('y'))
+            ),
+            zoom: Number(searchParams.get('z')),
+        }
+    }
+
+    /* push view to the URL if it's not already there */
+    pushURL(center, zoom) {
+        const current = this.pullURL();
+        const changed = current.center != center || current.zoom != zoom;
+
+        if (changed) {
+            const url = new URL(window.location);
+            const searchParams = url.searchParams;
+            searchParams.set('x', center.re);
+            searchParams.set('y', center.im);
+            searchParams.set('z', zoom);
+            window.history.pushState({}, '', url);
+        }
+    }
+
+    /* pull the container dimensions into the state */
+    pullContainerDimensions() {
+        const container = this.container.current;
+
+        this.setState({
+            width: container.offsetWidth,
+            height: container.offsetHeight,
         });
     }
 
     // outer render before dimensions are known
     render() {
-        const { containerDimensions } = this.state;
+        const { width, height } = this.state;
 
         return (
             <div className="app" ref={this.container}>
-                {containerDimensions && this.renderContent()}
+                {width && height && this.renderContent()}
             </div>
         );
     }
 
     // inner render when we know the container dimensions
-    // and hence the aspect ratio
     renderContent() {
-        const { viewBox, containerDimensions, infoModalVisible, samplerVisible, samplerC } = this.state;
-        const showSampler = samplerVisible && (samplerC != null);
-
-        // fit viewbox to the container
-        const viewBoxFitted = parseViewBox(viewBox).fit(containerDimensions, 'contain').toString();
+        const {
+            center,
+            width,
+            height,
+            zoom,
+            sample,
+            sampleVisible,
+            infoModalVisible,
+        } = this.state;
 
         return (
             <div>
                 <MandelbrotSet
-                    viewBox={viewBoxFitted}
-                    resX={containerDimensions.width}
-                    resY={containerDimensions.height} />
+                    center={center}
+                    zoom={zoom}
+                    width={width}
+                    height={height}
+                />
 
-                <div style={{ display: (showSampler ? "" : "none") }}>
-                    <Sampler
-                        viewBox={viewBoxFitted}
-                        c={samplerC}
-                        maxIterations={100} />
-                </div>
+                {sampleVisible ?
+                    <SampleDisplay
+                        center={center}
+                        zoom={zoom}
+                        width={width}
+                        height={height}
+                        sample={sample}
+                    />
+                    :
+                    <div></div>
+                }
 
                 <Selector
-                    viewBox={viewBoxFitted}
                     onPointHover={this.onPointHover}
-                    onBoxSelection={this.onBoxSelection} />
+                    onBoxSelection={this.onBoxSelection}
+                />
 
                 <Navbar
-                    sampleButtonActivated={samplerVisible}
+                    onResetClick={() => this.setState({ ...App.defaultView, infoModalVisible: false })}
+
+                    sampleActivated={sampleVisible}
+                    onSampleToggle={() => this.setState({ sampleVisible: !this.state.sampleVisible })}
+
                     workInProgress="1"
-                    onSampleToggle={() => this.setState({ samplerVisible: !this.state.samplerVisible })}
-                    onResetClick={() => this.setState({ viewBox: App.resetViewBox, infoModalVisible: false })}
-                    onInfoButtonClick={this.onInfoButtonClick} />
+                    onInfoButtonClick={this.onInfoButtonClick}
+                />
 
                 <InfoModal
                     visible={infoModalVisible}
-                    onCloseClick={this.onInfoCloseClick} />
+                    onCloseClick={this.onInfoCloseClick}
+                />
             </div>
         );
     }
 
-    setDimensions() {
-        const container = this.container.current;
-
-        this.setState({
-            containerDimensions: {
-                width: container.offsetWidth,
-                height: container.offsetHeight,
-            },
-        });
-    }
-
-    getInitialViewBox() {
-        const vb = getURLViewBox();
-
-        if (vb && vb.width && vb.height) {
-            return vb.toString();
-        }
-
-        // fall back when nothing proper is specified
-        return App.defaultViewBox;
-    }
-
     componentDidMount() {
         this.resizeObserver.observe(this.container.current);
-        this.setDimensions();
+        this.pullContainerDimensions();
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { containerDimensions } = this.state;
+        const { center, zoom } = this.state;
 
-        if (!_.isEqual(prevState.containerDimensions, containerDimensions)) {
-            containerDimensions && this.setDimensions();
-        }
-
-        // update the viewbox in the URL
-        if (prevState.viewBox != this.state.viewBox) {
-            setURLViewBox(this.state.viewBox);
+        // push view to url
+        if (prevState.center != center || prevState.zoom != zoom) {
+            this.pushURL(center, zoom);
         }
     }
 
@@ -279,36 +325,59 @@ class App extends React.Component {
         this.resizeObserver.disconnect();
     }
 
-    onBoxSelection(subViewBox) {
-        console.log("sub box selected", subViewBox);
+    onBoxSelection(box) {
+        this.setState((state, props) => {
+            const { center, zoom, width, height } = state;
 
-        if (subViewBox != this.state.viewBox) {
-            this.setState({ viewBox: subViewBox });
-        }
+            const newCenter = rectToImaginary(
+                center,
+                zoom,
+                width,
+                height,
+                box.left + box.width / 2,
+                box.top + box.height / 2
+            );
+
+            // zoom so the box is fully shown as big as possible
+            const fitWidth = box.width / width > box.height / height;
+            const factor = fitWidth ? width / box.width : state.height / box.height;
+            const newZoom = zoom * factor;
+
+            console.log("sub box selected with center", newCenter, "magnifying x", factor, 'to zoom level', newZoom);
+            return {
+                center: newCenter,
+                zoom: newZoom,
+            }
+        });
     }
 
-    onPointHover(viewBoxPoint) {
-        if (viewBoxPoint && this.state.samplerVisible) {
-            const sampleC = math.complex(viewBoxPoint.x, viewBoxPoint.y);
+    onPointHover(x, y) {
+        this.setState((state, props) => {
+            const { center, zoom, width, height } = state;
 
-            if (sampleC != this.state.samplerC) {
-                this.setState({ samplerC: sampleC, });
-            }
-        }
+            const point = rectToImaginary(
+                center,
+                zoom,
+                width,
+                height,
+                x,
+                y
+            );
+
+            return { sample: mbSample(point) };
+        });
     }
 }
 
 class MandelbrotSet extends React.Component {
-    static maxWorkerCount = 8;
     static frameThrottle = 5;
     static iterationsLimit = 4000;
 
     static defaultProps = {
-        centerX: 0,
-        centerY: 0,
+        center: complex(0),
 
         // pixels per unit length of imaginary plane
-        resolution: 100,
+        zoom: 100,
 
         // canvas dimensions in pixels
         width: 400,
@@ -319,15 +388,13 @@ class MandelbrotSet extends React.Component {
         super(props);
 
         this.state = {
-            workReference: null,
-            frameCount: 0,
+            setupFlag: false,
+            modelClientFlag: 0,
         }
 
         this.canvas = React.createRef();
-        this.workers = null;
-
-        // unprocessed frames of panels from workers
-        this.frames = [];
+        this.model = new ModelClient();
+        this.model.onUpdate = () => this.setState((state, props) => ({ modelClientFlag: state.modelClientFlag + 1 }));
     }
 
     render() {
@@ -341,159 +408,77 @@ class MandelbrotSet extends React.Component {
         );
     }
 
-    initiateCanvas() {
+    draw(snaps, canvasOffsetX, canvasOffsetY, update) {
+        const { width, height } = this.props;
+
         const canvas = this.canvas.current;
         const context = canvas.getContext('2d');
 
-        context.beginPath();
-        context.fillStyle = "grey";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    workerStart() {
-        const canvas = this.canvas.current;
-        const { centerX, centerY, resolution, width, height } = this.props;
-
-        // exclusion checks
-        if (!width || !height) {
-            console.log("trivial view, cancelling calculation");
-            this.setState({ workReference: null });
-            return;
+        // clear canvas
+        if (!update) {
+            context.beginPath();
+            context.fillStyle = "grey";
+            context.fillRect(0, 0, canvas.width, canvas.height);
         }
-
-        if (!this.workers || !this.workers.length) {
-            console.error("no workers set up");
-            this.setState({ workReference: null });
-            return;
-        }
-
-        // unique work ID
-        const workReference = Date.now() + "" + Math.floor(Math.random() * 1000000);
-        console.debug(workReference, 'initiating workers');
-
-        // set local model state
-        this.setState({
-            workReference: workReference,
-            frameCount: 0,
-        });
-
-        // blank and size the canvas
-        this.initiateCanvas();
-
-        // initiate workers
-        const workerCount = this.workers.length;
-
-        this.workers.forEach((worker, workerIndex) => {
-            worker.postMessage({
-                command: 'point',
-                workReference: `${workReference} ${workerIndex}`,
-                pointX: centerX,
-                pointY: centerY,
-                resolution: resolution,
-                width: width,
-                height: height,
-                step: workerCount,
-                offset: workerIndex,
-            });
-
-            worker.postMessage({
-                command: 'limit',
-                frameLimit: MandelbrotSet.frameThrottle,
-                iterationsLimit: MandelbrotSet.iterationsLimit,
-                pause: false,
-            });
-        });
-    }
-
-    workerMessage(message) {
-        this.frames.push(message.data);
-        this.setState((state, props) => ({ frameCount: state.frameCount + 1 }));
-    }
-
-    processFrame(frame) {
-        const context = this.canvas.current.getContext('2d');
-        const [workReference, workerID] = frame.workReference.split(" ");
-
-        // check frame is relevant
-        if (workReference != this.state.workReference) {
-            console.log(frame.workReference, 'frame ignored with mismatching reference');
-            return;
-        }
-
-        // find coordinates of the center of the canvas
-        const cx = Math.floor(this.props.width / 2);
-        const cy = Math.floor(this.props.height / 2);
 
         // render each panel to canvas
-        frame.snaps.forEach(snap => {
-            const { bitmap, panelX, panelY, x, y } = snap;
+        for (const snap of snaps) {
+            const { bitmap, canvasX, canvasY } = snap;
 
-            // coordinates on the canvas to draw this panel
-            const canvasX = cx + x;
-            const canvasY = cy + y;
-            context.drawImage(bitmap, canvasX, canvasY);
-        });
+            const x = canvasOffsetX + canvasX;
+            const y = canvasOffsetY + canvasY;
 
-        context.beginPath();
-        context.fillStyle = "blue";
-        context.fillRect(cx - 5, cy - 5, 10, 10);
+            // check the snap is on canvas
+            const outside = x + bitmap.width < 0 || x >= width
+                || y + bitmap.height < 0 || y >= height;
 
-        // update throttle limits
-        this.workers[workerID].postMessage({
-            command: 'limit',
-            frameLimit: frame.index + MandelbrotSet.frameThrottle,
-            iterationsLimit: MandelbrotSet.iterationsLimit,
-        });
-    }
-
-    processFrames() {
-        const frames = this.frames;
-
-        // new frames to new buffer
-        this.frames = [];
-
-        // process each frame in iteration order for smoothness
-        _.sortBy(frames, f => f.iteration).forEach(f => this.processFrame(f));
+            if (!outside) {
+                context.drawImage(bitmap, x, y);
+            }
+        };
     }
 
     componentDidMount() {
-        const workerCount = Math.min(navigator.hardwareConcurrency || 1, MandelbrotSet.maxWorkerCount);
-        this.workers = []
-
-        for (let i = 0; i < workerCount; i++) {
-            const worker = new Worker('worker.js');
-            worker.onmessage = this.workerMessage.bind(this);
-            this.workers.push(worker);
-        }
-
-        this.workerStart();
+        this.model.initiate();
+        this.setState({ setupFlag: true });
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { centerX, centerY, resolution, width, height } = this.props;
-        const { frameCount } = this.state;
+        const { zoom, center, width, height } = this.props;
+        const { setupFlag, modelClientFlag } = this.state;
+        const { model } = this;
 
-        // new model required?
-        const modelChanged = centerX != prevProps.centerX
-            || centerY != prevProps.centerY
-            || resolution != prevProps.resolution
-            || width != prevProps.width
-            || height != prevProps.height;
+        // console.log('state', this.state, prevState);
+        // console.log('props', this.props, prevProps);
+        const setup = setupFlag != prevState.setupFlag;
 
-        if (modelChanged) {
-            this.workerStart();
-        } else if (frameCount != prevState.frameCount) {
-            this.processFrames();
+        if (zoom != prevProps.zoom || setup) {
+            console.debug('update to zoom level', zoom);
+            this.draw([], 0, 0, false);
+            model.setZoom(zoom);
+            model.resetBudget();
+        }
+
+        // set center point
+        if (center != prevProps.center || width != prevProps.width || height != prevProps.height || setup) {
+            console.debug('update to center, width or height', center, width, height);
+            model.setCenter(center, width, height);
+            this.draw(model.full(), model.canvasOffsetX, model.canvasOffsetY, false);
+        }
+
+        // process new snaps
+        if (modelClientFlag != prevState.modelClientFlag) {
+            this.draw(model.flush(), model.canvasOffsetX, model.canvasOffsetY, true);
+            model.resetBudget();
         }
     }
 
     componentWillUnmount() {
-        this.workers && this.workers.forEach(w => w.terminate());
-        this.workers = null;
+        this.model.terminate();
     }
 }
 
-class Sampler extends React.Component {
+class SampleDisplay extends React.Component {
     static floatFormat = new Intl.NumberFormat(
         "us-en",
         {
@@ -502,84 +487,105 @@ class Sampler extends React.Component {
             maximumFractionDigits: 15
         }).format;
 
+    constructor(props) {
+        super(props);
+        this.canvas = React.createRef();
+    }
+
+    draw() {
+        const { center, zoom, width, height, sample } = this.props;
+        const canvas = this.canvas.current;
+
+        // no canvas to draw on
+        if (!canvas) {
+            return;
+        }
+
+        // blank slate
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, width, height);
+
+        // check something is specified to draw
+        if (!sample) {
+            return;
+        }
+
+        // convert coordinates to rectangle
+        const points = sample.zi.map(z => imaginarytoRect(center, zoom, width, height, z));
+
+        // draw line between points
+        context.beginPath();
+
+        // move to first point
+        const [x0, y0] = points[0];
+        context.moveTo(x0, y0);
+
+        // line to further points
+        for (const point of points) {
+            const [x, y] = point;
+            context.lineTo(x, y);
+        }
+        context.stroke();
+
+        // circles with point index
+        // todo
+    }
 
     render() {
-        const { c, maxIterations } = this.props;
-        const viewBox = parseViewBox(this.props.viewBox);
+        const { center, zoom, width, height, sample } = this.props;
 
-        // generate sample
-        // should be quick enough to be in here in render
-        const sample = mbSample(c, maxIterations);
-        const escaped = !sample.undetermined && sample.escapeAge;
-        const escapedClass = escaped ? "sampler-escaped" : "sampler-bounded";
+        // no sample supplied
+        if (!sample) {
+            return;
+        }
 
-        const polyLine = sample.zi.map(zi => `${zi.re},${zi.im}`).join(' ');
-        const pointSize = viewBox.width / 80;
-        const points = sample.zi.map((zi, i) =>
-            <svg
-                key={i}
-                x={zi.re - pointSize / 2}
-                y={zi.im - pointSize / 2}
-                width={pointSize + "px"}
-                height={pointSize + "px"}
-                viewBox="-10 -10 20 20">
-                <circle r="10" className={escapedClass} />
-                <text x="-9" y="3"
-                    lengthAdjust="spacingAndGlyphs" textLength="18px"
-                    transform="scale(1,-1)"
-                    style={{ font: "monospace 10px", stroke: "black", fill: "black" }}>
-                    {i}
-                </text>
-            </svg>
-        );
-
-        const tooltipLeft = (100 * (c.re - viewBox.left) / viewBox.width) + "%";
-        const tooltipTop = (100 * (viewBox.top - c.im) / viewBox.height) + "%";
+        const point = sample.zi[1];
+        const [tooltipLeft, tooltipTop] = imaginarytoRect(center, zoom, width, height, point);
+        const escape = Number.isFinite(sample.escapeAge);
 
         return (
-            <div ref={this.div}>
+            <div>
                 {/* numbered points and joining line */}
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="sampler"
-                    viewBox={this.props.viewBox}
-                    transform="scale(1,-1)" /* show complex plane with imaginary axis the right way up */
-                    preserveAspectRatio="none">
-                    <polyline points={polyLine} fill="none"></polyline>
-                    {points}
-                </svg>
+                <canvas ref={this.canvas} width={width} height={height}></canvas>
 
                 {/* tooltip */}
-                <div className="sampler-infobox" style={{ left: tooltipLeft, top: tooltipTop }}>
-                    <p>{Sampler.floatFormat(c.re)}</p>
-                    <p>{Sampler.floatFormat(c.im)}i</p>
+                <div className="sample-infobox" style={{ left: tooltipLeft, top: tooltipTop }}>
+                    <p>{SampleDisplay.floatFormat(point.re)}</p>
+                    <p>{SampleDisplay.floatFormat(point.im)}i</p>
                     <hr></hr>
                     <p>
                         z<sub>n</sub>
-                        <span className={escapedClass}>
-                            {escaped ? ` escapes ` : " remains bounded"}
+                        <span className={escape ? 'sample-escaped' : 'sample-bounded'}>
+                            {escape ? " escapes " : " remains bounded"}
                         </span>
-                        {escaped ? `at n=${sample.escapeAge}` : ""}
+                        {escape ? `at n=${sample.escapeAge}` : ""}
                     </p>
                 </div>
             </div>
         );
     }
+
+    componentDidMount() {
+        this.draw();
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if (!_.isEqual(this.props, prevProps)) {
+            this.draw();
+        }
+    }
 }
 
 // class to handle zooming, selecting, hovering
 class Selector extends React.Component {
-    static defaultProps = {
-        onBoxSelection: null,
-        onPointHover: null,
-    }
-
     constructor(props) {
         super(props);
 
         this.state = {
-            clickedPoint: null,
-            currentPoint: null,
+            clickedX: null,
+            clickedY: null,
+            currentX: null,
+            currentY: null,
         }
 
         this.div = React.createRef();
@@ -589,18 +595,21 @@ class Selector extends React.Component {
     }
 
     render() {
-        const { clickedPoint, currentPoint } = this.state;
-        const show = clickedPoint && currentPoint;
-        const box = show && this.boxGeometry(clickedPoint, currentPoint);
-        const boxStyle = box ? { ...box, visibility: "visible" } : { visibility: "hidden" };
+        const { clickedX, clickedY, currentX, currentY } = this.state;
+
+        const showBox = clickedX && clickedY && currentX && currentY;
+        const box = showBox && this.boxGeometry(clickedX, clickedY, currentX, currentY);
 
         return (
             <div ref={this.div}
                 className="selector"
                 onMouseDown={this.onMouseDown}
-                onMouseUp={this.onMouseUp}>
-                <div className="selector-box"
-                    style={boxStyle}>
+                onMouseUp={this.onMouseUp}
+            >
+                <div
+                    className="selector-box"
+                    style={showBox ? { ...box, visibility: "visible" } : { visibility: "hidden" }
+                    }>
                 </div>
             </div>
         );
@@ -611,6 +620,33 @@ class Selector extends React.Component {
         window.addEventListener("mouseup", this.onMouseUp);
     }
 
+    componentDidUpdate(prevProps, prevState) {
+        const { onPointHover, onBoxSelection } = this.props;
+        const { currentX, currentY, clickedX, clickedY } = this.state;
+
+        const isNum = Number.isFinite
+        const current = isNum(currentX) && isNum(currentY);
+        const clicked = isNum(clickedX) && isNum(clickedY);
+        const prevClicked = isNum(prevState.clickedX) && isNum(prevState.clickedY);
+
+        // hover callback
+        if (onPointHover && current && !clicked) {
+            if (currentX != prevState.currentX || currentY != prevState.currentY) {
+                onPointHover(currentX + 0, currentY + 0);
+            }
+        }
+
+        // box selection callback
+        if (onBoxSelection && current && !clicked && prevClicked) {
+            onBoxSelection(this.boxGeometry(
+                prevState.clickedX,
+                prevState.clickedY,
+                currentX,
+                currentY
+            ));
+        }
+    }
+
     componentWillUnmount() {
         window.removeEventListener("mousemove", this.onMouseMove);
         window.removeEventListener("mouseup", this.onMouseUp);
@@ -618,13 +654,13 @@ class Selector extends React.Component {
 
     // get box dimensions maintaining aspect ration of div container
     // the box has the usual rectangle coordinate system (vertical increasing downwards)
-    boxGeometry(clickedPoint, currentPoint) {
+    boxGeometry(clickedX, clickedY, currentX, currentY) {
         const rect = {
-            left: clickedPoint.x,
-            top: clickedPoint.y,
-            width: currentPoint.x - clickedPoint.x,
-            height: currentPoint.y - clickedPoint.y,
-        }
+            left: clickedX,
+            top: clickedY,
+            width: currentX - clickedX,
+            height: currentY - clickedY,
+        };
 
         // correct inside out rectangle
         if (rect.width < 0) {
@@ -637,68 +673,38 @@ class Selector extends React.Component {
             rect.height *= -1;
         }
 
-        rect.right = rect.left + rect.width;
-        rect.bottom = rect.top + rect.height;
         return rect;
     }
 
     onMouseMove(e) {
-        const { onPointHover, viewBox } = this.props;
-        const { currentPoint, clickedPoint } = this.state;
-        const divRect = this.div.current.getBoundingClientRect();
+        const rect = this.div.current.getBoundingClientRect();
 
-        // clip position to the app frame
-        const clientX = Math.min(Math.max(divRect.left, e.clientX), divRect.right);
-        const clientY = Math.min(Math.max(divRect.top, e.clientY), divRect.bottom);
-        const clipped = clientX != e.clientX || clientY != e.clientY;
+        // clip cursor position to the app frame
+        const clientX = Math.min(Math.max(rect.left, e.clientX), rect.right);
+        const clientY = Math.min(Math.max(rect.top, e.clientY), rect.bottom);
 
-        const newCurrentPoint = { x: clientX - divRect.left, y: clientY - divRect.top };
-        const currentPointMoved = !currentPoint || (newCurrentPoint.x != currentPoint.x) || (newCurrentPoint.y != currentPoint.y);
-
-        // report new state to this component
-        if (currentPointMoved) {
-            this.setState({ currentPoint: newCurrentPoint });
-        }
-
-        // hover callback to parent
-        if (onPointHover && currentPointMoved && !clickedPoint && !clipped) {
-            const viewBoxPoint = parseViewBox(viewBox).transform(divRect, { x: clientX, y: clientY });
-            onPointHover(viewBoxPoint);
-        }
+        this.setState({
+            currentX: clientX - rect.left,
+            currentY: clientY - rect.top,
+        });
     }
 
     onMouseDown(e) {
         if (e.button == 0) {
-            const divRect = this.div.current.getBoundingClientRect();
-            this.setState({ clickedPoint: { x: e.clientX - divRect.left, y: e.clientY - divRect.top } });
+            const rect = this.div.current.getBoundingClientRect();
+
+            this.setState({
+                clickedX: e.clientX - rect.left,
+                clickedY: e.clientY - rect.top,
+            });
         }
     }
 
     onMouseUp(e) {
-        const { currentPoint, clickedPoint } = this.state;
-        const { onBoxSelection, viewBox } = this.props;
-        const divRect = this.div.current.getBoundingClientRect();
-
-        // check if the mouse is outside the div - in this case cancel selection
-        if (onBoxSelection && clickedPoint && currentPoint) {
-            const eventInDiv = (e.clientX <= divRect.right)
-                && (e.clientX >= divRect.left)
-                && (e.clientY <= divRect.bottom)
-                && (e.clientY >= divRect.top);
-
-            if (eventInDiv) {
-                const bg = this.boxGeometry(clickedPoint, currentPoint);
-                const bgBox = { left: 0, top: 0, width: divRect.width, height: divRect.height };
-
-                if (bg.width > 10 && bg.height > 10) {
-                    const subViewRect = parseViewBox(viewBox).transform(bgBox, bg);
-                    const subViewBox = parseViewBox(subViewRect).toString();
-                    onBoxSelection(subViewBox);
-                }
-            }
-        }
-
-        this.setState({ clickedPoint: null });
+        this.setState({
+            clickedX: null,
+            clickedY: null,
+        });
     }
 }
 

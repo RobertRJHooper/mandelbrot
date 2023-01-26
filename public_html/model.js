@@ -1,5 +1,8 @@
 "use strict";
 
+// import math functions into global namespace
+var { complex, conj, add, subtract, multiply, divide, ceil, floor, sqrt } = math;
+
 
 // is the point in the main cardiod where zn converges?
 function mbInPrimary(c) {
@@ -16,7 +19,7 @@ function mbInPrimary(c) {
   }
 
   // full calculation
-  const z = math.sqrt(math.complex(-4 * c.re + 1, -4 * c.im));
+  const z = sqrt(complex(-4 * c.re + 1, -4 * c.im));
   z.re = z.re - 1;
   return z.re * z.re + z.im * z.im < 0.9999;
 }
@@ -42,7 +45,7 @@ function mbIterate(z, c) {
 class Point {
   constructor(c) {
     this.c = c;
-    this.z = math.complex(0, 0);
+    this.z = complex(0);
     this.age = 0;
     this.escapeAge = null;
 
@@ -73,11 +76,11 @@ function mbSample(c, iterations = 100) {
 
   // run to escape of max iterations
   while (point.age < iterations) {
-    zi.push(math.complex(point.z));
+    zi.push(complex(point.z));
     point.iterate();
 
     if (point.escapeAge && point.escapeAge + 1 < point.age) {
-        break;
+      break;
     }
   }
 
@@ -87,10 +90,10 @@ function mbSample(c, iterations = 100) {
 }
 
 // helper to get the complex value of an (x, y) point in the grid
-function gridToValue(center, resolution, width, height, i, j) {
-  const dx = (i - (width - 1) / 2) / resolution;
-  const dy = (j - (height - 1) / 2) / resolution;
-  return math.complex(center.re + dx, center.im + dy);
+function gridToValue(center, zoom, width, height, i, j) {
+  const dx = (i - (width - 1) / 2) / zoom;
+  const dy = (j - (height - 1) / 2) / zoom;
+  return complex(center.re + dx, center.im - dy);
 }
 
 // helper to get the (x, y) point in the grid from a complex point
@@ -141,9 +144,9 @@ function ageToRGB(age) {
 }
 
 class MandelbrotGrid {
-  constructor(center, resolution, width, height, step = 1, offset = 0) {
+  constructor(center, zoom, width, height, step = 1, offset = 0) {
     this.center = center;
-    this.resolution = resolution;
+    this.zoom = zoom;
     this.width = width;
     this.height = height;
     this.image = null;
@@ -166,11 +169,11 @@ class MandelbrotGrid {
   initiateImage() {
     const { width, height, step, offset } = this;
 
-    this.image = new ImageData(width, height);  
+    this.image = new ImageData(width, height);
     const imageData = this.image.data;
     const imageDataLength = this.image.data.length;
     const stride = 4 * step;
-    
+
     for (let i = 4 * offset; i < imageDataLength; i += stride) {
       imageData[i + 0] = 0;
       imageData[i + 1] = 0;
@@ -180,7 +183,7 @@ class MandelbrotGrid {
   }
 
   initiatePoints() {
-    const { center, resolution, width, height, step, offset} = this;
+    const { center, zoom, width, height, step, offset } = this;
     const points = [];
 
     // this could be vectorised for speed
@@ -193,7 +196,7 @@ class MandelbrotGrid {
           continue;
         }
 
-        const point = new Point(gridToValue(center, resolution, width, height, i, j));
+        const point = new Point(gridToValue(center, zoom, width, height, i, j));
         point.idx = idx;
         points.push(point);
       }
@@ -218,7 +221,7 @@ class MandelbrotGrid {
     determined.forEach((point) => {
       const i = point.idx * 4;
 
-      if(point.escapeAge !== null) {
+      if (point.escapeAge !== null) {
         const rgb = ageToRGB(point.escapeAge);
         imageData[i + 0] = rgb[0];
         imageData[i + 1] = rgb[1];

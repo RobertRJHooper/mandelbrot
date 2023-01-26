@@ -14,115 +14,107 @@ const frameThrottlePeriod = 250;
 class Panel extends MandelbrotGrid {
   static width = 32;
 
-  constructor(center, resolution, step, offset) {
-    super(center, resolution, Panel.width, Panel.width, step, offset);
+  constructor(center, zoom, step, offset) {
+    super(center, zoom, Panel.width, Panel.width, step, offset);
     this.iteration = 0;
+    this.dirty = true;
   }
 
   async getBitmap() {
+    this.dirty = false;
     return await createImageBitmap(this.image);
   }
 
   iterate() {
-    super.iterate();
+    const ret = super.iterate();
     this.iteration += 1;
+    this.dirty |= ret;
+    return this.dirty;
   }
 }
 
 class Panels {
-  constructor(originX, originY, resolution, step, offset) {
-    this.originX = originX;
-    this.originY = originY;
-    this.resolution = resolution;
+  constructor(zoom, step, offset) {
+    this.zoom = zoom;
     this.step = step;
     this.offset = offset;
 
     // storage for all cached frames
-    this.allPanels = {};
+    this.panels = new Map();
 
-    // current point and frames around it
-    this.workReference = null;
-    this.pointX = null;
-    this.pointY = null;
-    this.panels = null;
+    // current center point and panels around it
+    this.center = null;
+    this.visiblePanels = [];
 
     // limiters
     this.pause = false;
-    this.dirty = true; // new pixels exist to send to master
     this.iteration = 0;
     this.iterationsLimit = 3000;
-    this.frameIndex = 0;
-    this.frameLimit = 5;
-    this.frameIteration = 0;
+
+    this.frameBudget = 0;
     this.frameTime = null;
   }
 
-  // can we use this instance for a give point
-  isCompatible(pointX, pointY, resolution, step, offset) {
-    return this.resolution == resolution
-      && this.step == step
-      && this.offset == offset;
-  }
-
-  // frames around the point that cover
-  setPoint(workReference, pointX, pointY, width, height) {
-    const { originX, originY, resolution } = this;
+  // set panels around the point that cover width and height
+  setCenter(center, width, height) {
+    const { zoom, step, offset } = this;
 
     // save current point
-    this.workReference = workReference;
-    this.pointX = pointX;
-    this.pointY = pointY;
+    this.center = center;
 
-    // view box in pixels about origin point
-    const xMin = (pointX - originX) * resolution - width / 2;
-    const xMax = (pointX - originX) * resolution + width / 2;
-    const yMin = (pointY - originY) * resolution - height / 2;
-    const yMax = (pointY - originY) * resolution + height / 2;
+    // total view box in units of panels about origin
+    const pCenter = divide(multiply(center, zoom), Panel.width);
+    const pWidth = width / Panel.width;
+    const pHeight = height / Panel.width;
 
     // viewbox in panels
-    const pxMin = Math.floor(xMin / Panel.width);
-    const pxMax = Math.ceil(xMax / Panel.width);
-    const pyMin = Math.floor(yMin / Panel.width);
-    const pyMax = Math.ceil(yMax / Panel.width);
+    const xMin = floor(pCenter.re - pWidth / 2);
+    const xMax = ceil(pCenter.re + pWidth / 2);
+    const yMin = floor(pCenter.im - pHeight / 2);
+    const yMax = ceil(pCenter.im + pHeight / 2);
 
     // get panels from the cache of create new ones
-    const panels = [];
+    const visiblePanels = [];
 
-    for (let panelX = pxMin; panelX < pxMax; panelX++) {
-      for (let panelY = pyMin; panelY < pyMax; panelY++) {
-        const key = `${panelX} ${panelY}`;
-        let panel = this.allPanels[key];
+    for (let panelX = xMin; panelX < xMax; panelX++) {
+      for (let panelY = yMin; panelY < yMax; panelY++) {
+        const key = `${panelX} ${panelY} ${step} ${offset}`;
+        let panel = this.panels.get(key);
 
         // create panel if it is not already in the cache
         if (typeof panel == "undefined") {
-          const centre = math.complex(
-            this.originX + (panelX + 0.5) * Panel.width / this.resolution,
-            this.originY + (panelY + 0.5) * Panel.width / this.resolution,
+          const panelCenter = complex(
+            (panelX + 0.5) / zoom * Panel.width,
+            (panelY + 0.5) / zoom * Panel.width,
           );
 
-          this.allPanels[key] = panel = new Panel(centre, this.resolution, this.step, this.offset);
+          panel = new Panel(panelCenter, zoom, step, offset);
           panel.initiate();
           panel.key = key;
-          panel.panelX = panelX;
-          panel.panelY = panelY;
+
+          // canvas coordinates of bottom left
+          // on the canvas Y-axis increasing is downwards (multiple panelY by -1)
+          // and the box is painted downwards (add 1 to panelY)
+          panel.canvasX = panelX * Panel.width;
+          panel.canvasY = -1 * (panelY + 1) * Panel.width;
+          this.panels.set(key, panel);
         }
 
-        panels.push(panel);
+        visiblePanels.push(panel);
       }
     }
 
+    // diagnostics
+    console.debug('visible panels selected', visiblePanels.length);
+
     // state
-    this.panels = panels;
-    this.dirty = true;
+    this.visiblePanels = visiblePanels;
     this.iteration = 0;
-    this.frameIndex = 0;
-    this.frameIteration = 0;
-    this.frameTime = null;
   }
 
   // iterate all current panels
   iterate() {
-    for (let panel of this.panels) {
+    for (let panel of this.panels.values()) {
       if (panel.iteration <= this.iterationsLimit) {
         if (panel.iterate()) {
           this.dirty = true;
@@ -132,86 +124,101 @@ class Panels {
     this.iteration += 1;
   }
 
-  // post updates for current frames
+  // post updates for visible panels
   async post(timestamp) {
+    const dirtyPanels = this.visiblePanels.filter(p => p.dirty);
 
-    // panels to send - at the moment send all - could filter to changed ones
-    const dirty = this.panels;
+    // no dirty panels to send
+    if(!dirtyPanels.length) {
+      return null;
+    }
 
-    // generate all bitmaps asyncronously
-    const bitmaps = await Promise.all(dirty.map(p => p.getBitmap()));
-
-    // pixel offset of origin from the point
-    const xOffset = Math.round((this.originX - this.pointX) * this.resolution);
-    const yOffset = Math.round((this.originY - this.pointY) * this.resolution);
+    // diagnostics
+    console.debug('posting frame of dirty panels', dirtyPanels.length, 'of', this.visiblePanels.length);
     
+    // generate all bitmaps asyncronously
+    const bitmaps = await Promise.all(dirtyPanels.map(p => p.getBitmap()));
+
     // put together panels with meta info
     let snaps = [];
-    for (let [panel, bitmap] of _.zip(dirty, bitmaps)) {
-      snaps.push({
-        bitmap: bitmap,
 
-        // top left corner coordinates in pixels relative to selected point
-        x: xOffset + panel.panelX * Panel.width,
-        y: yOffset + panel.panelY * Panel.width,
+    for (let [panel, bitmap] of _.zip(dirtyPanels, bitmaps)) {
+      snaps.push({
+        key: panel.key,
+        canvasX: panel.canvasX,
+        canvasY: panel.canvasY,
+        bitmap: bitmap,
       });
     }
 
     // counters
-    this.frameIndex += 1;
-    this.frameIteration = this.iteration;
+    this.frameBudget -= 1;
     this.frameTime = timestamp;
 
     // send to master
     postMessage({
-      workReference: this.workReference,
-      index: this.frameIndex,
-      iteration: this.frameIteration,
+      zoom: this.zoom,
       snaps: snaps,
+
+      offset: this.offset,
+      step: this.step,
     }, snaps.map(s => s.bitmap));
+
+    // return signally something was sent
+    return true;
   }
 
   // check if frame issue throttling is applying now
   isFrameThrottled(timestamp) {
-    const { frameIndex, frameLimit, frameTime } = this;
+    const { frameBudget, frameTime } = this;
 
-    if (frameIndex >= frameLimit) {
+    if (frameBudget <= 0) {
       return true;
     }
 
-    if (frameTime && (timestamp < frameTime + frameThrottlePeriod)) {
-      return true;
+    if (frameTime) {
+      if (timestamp < frameTime + frameThrottlePeriod) {
+        return true;
+      }
     }
 
     return false;
   }
 }
 
-// current frame server
+// current frame controller
 var currentPanels = null;
 
 // incoming message handler
 onmessage = function (e) {
   switch (e.data.command) {
-    case 'point': {
-      const { workReference, pointX, pointY, resolution, width, height, step, offset } = e.data;
+    case 'zoom': {
+      const { zoom, step, offset } = e.data;
+      console.debug('setting up worker with zoom level', zoom, 'step', step, 'offset', offset);
 
-      // get the frame server one way or another
-      let panels;
+      currentPanels = new Panels(
+        zoom,
+        step,
+        offset
+      );
+      break;
+    }
 
-      if (currentPanels && currentPanels.isCompatible(pointX, pointY, resolution, step, offset)) {
-        console.debug(workReference, 'reusing current panels');
-        panels = currentPanels;
-      } else {
-        console.debug(workReference, 'no panels to reuse, starting from scratch');
-
-        // use the selected point as origin
-        panels = new Panels(pointX, pointY, resolution, step, offset);
-        currentPanels = panels;
+    case 'center': {
+      const { center, width, height } = e.data;
+      const panels = currentPanels;
+      console.debug('setting center in worker', center);
+      
+      if (!panels) {
+        console.error('zoom level not setup yet while setting center');
+        break;
       }
 
-      // set current point
-      panels.setPoint(workReference, pointX, pointY, width, height);
+      panels.setCenter(
+        complex(center),
+        width,
+        height
+      );
       break;
     }
 
@@ -224,10 +231,10 @@ onmessage = function (e) {
         break;
       }
 
-      const { frameLimit, iterationsLimit, pause } = e.data;
+      const { frameBudget, iterationsLimit, pause } = e.data;
 
-      if (typeof frameLimit != "undefined") {
-        panels.frameLimit = Math.max(frameLimit, panels.frameLimit);
+      if (typeof frameBudget != "undefined") {
+        panels.frameBudget = frameBudget;
       }
 
       if (typeof iterationsLimit != "undefined") {
@@ -242,7 +249,7 @@ onmessage = function (e) {
     }
 
     default:
-      throw new ValueError('unknown worker command received', command);
+      throw new Error(`unknown worker command "${e.data.command}" received`);
   }
 }
 
@@ -255,15 +262,17 @@ async function loop() {
     return false;
   }
 
-  // post a frame to master if required
-  if (panels.dirty) {
-    const timestamp = Date.now();
+  // decide if was can send panels to master
+  const timestamp = Date.now();
+  const throttled = panels.isFrameThrottled(timestamp);
 
-    if (!panels.isFrameThrottled(timestamp)) {
-      await panels.post(timestamp);
+  // post a frame of panels to the master
+  if (!throttled) {
+    if(await panels.post(timestamp)) {
       return true;
     }
   }
+
 
   // iterate points in each panel
   if (!panels.pause && panels.iteration < panels.iterationsLimit) {
