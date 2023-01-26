@@ -1,13 +1,12 @@
 Next todo:
-brower url change should trigger reread of url parameterisation
-complete sampler draw
-move model client code to it's own file
+image deltas - panning and zooming - by mouse, touch
 
 Features to make:
-icons: change selector to join the dots icon, add box selector icon for mouse zooming
-image deltas - panning and zooming - by mouse, touch
-trace stick on click
 high precision numbers
+complete sampler draw
+brower url change should trigger reread of url parameterisation
+icons: change selector to join the dots icon, add box selector icon for mouse zooming
+trace stick on click
 
 maybes:
 test in safari
@@ -20,6 +19,7 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+move model client code to it's own file
 put worker code in a ModelClient class
 post only updated frames to master in worker
 link canvas size in app to set

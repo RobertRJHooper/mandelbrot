@@ -3,7 +3,6 @@
 // import math functions into global namespace
 var { complex, conj, add, subtract, multiply, divide, ceil, floor, sqrt } = math;
 
-
 // is the point in the main cardiod where zn converges?
 function mbInPrimary(c) {
   const { re, im } = c;
