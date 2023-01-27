@@ -14,10 +14,10 @@ const frameThrottlePeriod = 250;
 class Panel extends MandelbrotGrid {
   static width = 32;
 
-  constructor(center, zoom, step, offset) {
-    super(center, zoom, Panel.width, Panel.width, step, offset);
+  constructor(center, zoom) {
+    super(center, zoom, Panel.width, Panel.width);
     this.iteration = 0;
-    this.dirty = true;
+    this.dirty = false;
   }
 
   async getBitmap() {
@@ -36,6 +36,9 @@ class Panel extends MandelbrotGrid {
 class Panels {
   constructor(zoom, step, offset) {
     this.zoom = zoom;
+
+    // only consider a subset of panels determined
+    // by step and offset to facilitate multitasking
     this.step = step;
     this.offset = offset;
 
@@ -76,6 +79,8 @@ class Panels {
 
     for (let panelX = xMin; panelX < xMax; panelX++) {
       for (let panelY = yMin; panelY < yMax; panelY++) {
+        if ((panelX + panelY - offset) % step) continue;
+
         const key = `${panelX} ${panelY} ${step} ${offset}`;
         let panel = this.panels.get(key);
 
@@ -86,7 +91,7 @@ class Panels {
             (panelY + 0.5) / zoom * Panel.width,
           );
 
-          panel = new Panel(panelCenter, zoom, step, offset);
+          panel = new Panel(panelCenter, zoom);
           panel.initiate();
           panel.key = key;
 
@@ -127,13 +132,13 @@ class Panels {
     const dirtyPanels = this.visiblePanels.filter(p => p.dirty);
 
     // no dirty panels to send
-    if(!dirtyPanels.length) {
+    if (!dirtyPanels.length) {
       return null;
     }
 
     // diagnostics
     console.debug('posting frame of dirty panels', dirtyPanels.length, 'of', this.visiblePanels.length);
-    
+
     // generate all bitmaps asyncronously
     const bitmaps = await Promise.all(dirtyPanels.map(p => p.getBitmap()));
 
@@ -156,9 +161,6 @@ class Panels {
     postMessage({
       zoom: this.zoom,
       snaps: snaps,
-
-      offset: this.offset,
-      step: this.step,
     }, snaps.map(s => s.bitmap));
 
     // return signally something was sent
@@ -186,12 +188,7 @@ onmessage = function (e) {
     case 'zoom': {
       const { zoom, step, offset } = e.data;
       console.debug('setting up worker with zoom level', zoom, 'step', step, 'offset', offset);
-
-      currentPanels = new Panels(
-        zoom,
-        step,
-        offset
-      );
+      currentPanels = new Panels(zoom, step, offset);
       break;
     }
 
@@ -199,17 +196,13 @@ onmessage = function (e) {
       const { center, width, height } = e.data;
       const panels = currentPanels;
       console.debug('setting center in worker', center);
-      
+
       if (!panels) {
         console.error('zoom level not setup yet while setting center');
         break;
       }
 
-      panels.setCenter(
-        complex(center),
-        width,
-        height
-      );
+      panels.setCenter(complex(center), width, height);
       break;
     }
 
@@ -253,11 +246,10 @@ async function loop() {
 
   // post a frame of panels to the master
   if (!throttled) {
-    if(await panels.post(timestamp)) {
+    if (await panels.post(timestamp)) {
       return true;
     }
   }
-
 
   // iterate points in each panel
   if (!panels.pause && panels.iteration < panels.iterationsLimit) {

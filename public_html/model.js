@@ -143,19 +143,12 @@ function ageToRGB(age) {
 }
 
 class MandelbrotGrid {
-  constructor(center, zoom, width, height, step = 1, offset = 0) {
+  constructor(center, zoom, width, height) {
     this.center = center;
     this.zoom = zoom;
     this.width = width;
     this.height = height;
     this.image = null;
-
-    // step and offset are used to only consider
-    // a portion of the points so we can have
-    // multiple grids on different cpus
-    // working on one view
-    this.step = step;
-    this.offset = offset;
 
     // flat list of all points
     this.points = null;
@@ -166,35 +159,24 @@ class MandelbrotGrid {
   }
 
   initiateImage() {
-    const { width, height, step, offset } = this;
-
-    this.image = new ImageData(width, height);
+    this.image = new ImageData(this.width, this.height);
     const imageData = this.image.data;
     const imageDataLength = this.image.data.length;
-    const stride = 4 * step;
 
-    for (let i = 4 * offset; i < imageDataLength; i += stride) {
-      imageData[i + 0] = 0;
-      imageData[i + 1] = 0;
-      imageData[i + 2] = 0;
-      imageData[i + 3] = 255;
+    // set image to opaque black
+    for (let i = 3; i < imageDataLength; i += 4) {
+      imageData[i] = 255;
     }
   }
 
   initiatePoints() {
-    const { center, zoom, width, height, step, offset } = this;
+    const { center, zoom, width, height} = this;
     const points = [];
 
     // this could be vectorised for speed
     for (let j = 0; j < height; j++) {
       for (let i = 0; i < width; i++) {
         const idx = j * width + i;
-
-        // filter to relevant subset of points
-        if (idx % step != offset) {
-          continue;
-        }
-
         const point = new Point(gridToValue(center, zoom, width, height, i, j));
         point.idx = idx;
         points.push(point);

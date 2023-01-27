@@ -38,6 +38,7 @@ class App extends React.Component {
         this.onPointHover = this.onPointHover.bind(this);
         this.onPan = this.onPan.bind(this);
         this.onPanRelease = this.onPanRelease.bind(this);
+        this.pushURLDebounced = _.debounce(() => this.pushURL(this.state.center, this.state.zoom), 1000);
     }
 
     /* get viewbox as specified in the URL, or return null */
@@ -142,11 +143,8 @@ class App extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { center, zoom } = this.state;
-
-        // push view to url
-        if (prevState.center != center || prevState.zoom != zoom) {
-            this.pushURL(center, zoom);
+        if (prevState.center != this.state.center || prevState.zoom != this.state.zoom) {
+            this.pushURLDebounced();
         }
     }
 
