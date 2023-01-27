@@ -519,13 +519,13 @@ class Selector extends React.Component {
     }    
 
     removeListeners() {
-        window.removeEventListener("mousemove", this.onMouseMove);
         window.removeEventListener("mouseup", this.onMouseUp);
-
+        
         // client area listeners
         const div = this.divListening;
         if (div) {
             div.removeEventListener("mousedown", this.onMouseDown);
+            div.removeEventListener("mousemove", this.onMouseMove);
             div.removeEventListener("touchstart", this.onTouchStart);
             div.removeEventListener("touchend", this.onTouchEnd);
             div.removeEventListener("touchcancel", this.onTouchCancel);
@@ -534,15 +534,17 @@ class Selector extends React.Component {
         }
     }
 
-    setListeners(div) {
+    setListeners() {
         this.removeListeners();
-
+        
         // global listeners
-        window.addEventListener("mousemove", this.onMouseMove);
         window.addEventListener("mouseup", this.onMouseUp);
-
+        
         // client area listeners
+        const div = this.div.current;
+    
         if (div) {
+            div.addEventListener("mousemove", this.onMouseMove);
             div.addEventListener("mousedown", this.onMouseDown);
             div.addEventListener("touchstart", this.onTouchStart);
             div.addEventListener("touchend", this.onTouchEnd);
@@ -553,14 +555,12 @@ class Selector extends React.Component {
     }
 
     componentDidMount() {
-        this.setListeners(this.div.current);
+        this.setListeners();
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const div = this.div.current;
-
-        if (this.divListening != div) {
-            this.setListeners(div);
+        if (this.divListening != this.div.current) {
+            this.setListeners();
         }
     }
 
@@ -658,6 +658,7 @@ class Selector extends React.Component {
     }
 
     onMouseMove(e) {
+        e.preventDefault();
         this.handleMove(e.clientX, e.clientY);
     }
 
