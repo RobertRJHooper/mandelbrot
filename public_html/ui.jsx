@@ -214,7 +214,7 @@ class App extends React.Component {
 }
 
 class MandelbrotSet extends React.Component {
-    static frameThrottle = 5;
+    static framePeriod = 1000 / 4;
     static iterationsLimit = 4000;
 
     static defaultProps = {
@@ -236,6 +236,7 @@ class MandelbrotSet extends React.Component {
         this.canvas = React.createRef();
         this.running = false;
         this.animationFrame = this.animationFrame.bind(this);
+        this.lastFrameTime = null;
     }
 
     render() {
@@ -258,31 +259,36 @@ class MandelbrotSet extends React.Component {
     }
 
     animationFrame(timestamp) {
-        const { width, height } = this.props;
-        const { canvasOffsetX, canvasOffsetY } = this.model;
-        const canvas = this.canvas.current;
-
-        if (canvas) {
-            const context = canvas.getContext('2d');
-
-            for (const snap of this.model.flush()) {
-                const { bitmap, canvasX, canvasY } = snap;
-
-                const x = canvasOffsetX + canvasX;
-                const y = canvasOffsetY + canvasY;
-
-                // check the snap is on canvas
-                const visible = x + bitmap.width >= 0
-                    && x < width
-                    && y + bitmap.height >= 0
-                    && y < height;
-
-                if (visible) context.drawImage(bitmap, x, y);
-            }
+        if(!this.lastFrameTime || this.lastFrameTime + MandelbrotSet.framePeriod >= timestamp) {
+            const { width, height } = this.props;
+            const { canvasOffsetX, canvasOffsetY } = this.model;
+            const canvas = this.canvas.current;
+    
+            if (canvas) {
+                const context = canvas.getContext('2d', {alpha: false});
+    
+                for (const snap of this.model.flush()) {
+                    const { bitmap, canvasX, canvasY } = snap;
+    
+                    const x = canvasOffsetX + canvasX;
+                    const y = canvasOffsetY + canvasY;
+    
+                    // check the snap is on canvas
+                    const visible = x + bitmap.width >= 0
+                        && x < width
+                        && y + bitmap.height >= 0
+                        && y < height;
+    
+                    if (visible) context.drawImage(bitmap, x, y);
+                }
+            }    
         }
 
         // loop
-        if (this.running) window.requestAnimationFrame(this.animationFrame);
+        if (this.running) {
+            this.lastFrameTime = timestamp;
+            window.requestAnimationFrame(this.animationFrame);
+        }
     }
 
     componentDidMount() {
