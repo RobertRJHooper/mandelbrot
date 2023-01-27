@@ -425,9 +425,14 @@ class Selector extends React.Component {
         }
 
         this.div = React.createRef();
+
         this.onMouseMove = this.onMouseMove.bind(this);
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
+        this.onTouchStart = this.onTouchStart.bind(this);
+        this.onTouchEnd = this.onTouchEnd.bind(this);
+        this.onTouchCancel = this.onTouchCancel.bind(this);
+        this.onTouchMove = this.onTouchMove.bind(this);
     }
 
     render() {
@@ -454,6 +459,19 @@ class Selector extends React.Component {
     componentDidMount() {
         window.addEventListener("mousemove", this.onMouseMove);
         window.addEventListener("mouseup", this.onMouseUp);
+        window.addEventListener("touchstart", this.onTouchStart);
+        window.addEventListener("touchend", this.onTouchEnd);
+        window.addEventListener("touchcancel", this.onTouchCancel);
+        window.addEventListener("touchmove", this.onTouchMove);
+    }
+
+    componentWillUnmount() {
+        window.removeEventListener("mousemove", this.onMouseMove);
+        window.removeEventListener("mouseup", this.onMouseUp);
+        window.removeEventListener("touchstart", this.onTouchStart);
+        window.removeEventListener("touchend", this.onTouchEnd);
+        window.removeEventListener("touchcancel", this.onTouchCancel);
+        window.removeEventListener("touchmove", this.onTouchMove);
     }
 
     componentDidUpdate(prevProps, prevState) {
@@ -481,11 +499,6 @@ class Selector extends React.Component {
                 currentY
             ));
         }
-    }
-
-    componentWillUnmount() {
-        window.removeEventListener("mousemove", this.onMouseMove);
-        window.removeEventListener("mouseup", this.onMouseUp);
     }
 
     // get box dimensions maintaining aspect ration of div container
@@ -541,6 +554,22 @@ class Selector extends React.Component {
             clickedX: null,
             clickedY: null,
         });
+    }
+
+    onTouchStart(e) {
+        console.debug('touch start', e);
+    }
+
+    onTouchEnd(e) {
+        console.debug('touch end', e);
+    }
+
+    onTouchCancel(e) {
+        console.debug('touch cancel', e);
+    }
+
+    onTouchMove(e) {
+        console.debug('touch move', e);
     }
 }
 

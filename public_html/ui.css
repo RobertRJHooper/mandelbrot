@@ -68,6 +68,9 @@
     left: 0;
     width: 100%;
     height: 100%;
+
+    /* disable default touch actions */
+    touch-action: none;
 }
 
 .selector-box {
@@ -80,6 +83,29 @@
     /* transparent */
     background-color: rgba(0, 0, 0, 0);
 }
+
+.grabbable {
+    cursor: move;
+    cursor: grab;
+}
+
+.grabbing {
+    cursor: move;
+    cursor: grabbing;
+}
+
+.zooming-in {
+    cursor: zoom-in;
+}
+
+.zooming-out {
+    cursor: zoom-out;
+}
+
+.boxselecting {
+    cursor: crosshair;
+}
+
 
 .navbar {
     position: absolute;
