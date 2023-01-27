@@ -5,8 +5,8 @@ Features to make:
 high precision numbers
 complete sampler draw
 brower url change should trigger reread of url parameterisation
-icons: change selector to join the dots icon, add box selector icon for mouse zooming
 trace stick on click
+throttle animation frame to 5fps?
 
 maybes:
 test in safari
@@ -19,6 +19,8 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+icons: change selector to join the dots icon, add box selector icon for mouse zooming
+use requestframe to handle throttling so the calculation pauses in the background and drawing is paced with the callback
 move model client code to it's own file
 put worker code in a ModelClient class
 post only updated frames to master in worker

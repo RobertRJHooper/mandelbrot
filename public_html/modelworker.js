@@ -50,8 +50,6 @@ class Panels {
     this.pause = false;
     this.iteration = 0;
     this.iterationsLimit = 3000;
-
-    this.frameBudget = 0;
     this.frameTime = null;
   }
 
@@ -152,7 +150,6 @@ class Panels {
     }
 
     // counters
-    this.frameBudget -= 1;
     this.frameTime = timestamp;
 
     // send to master
@@ -170,14 +167,8 @@ class Panels {
 
   // check if frame issue throttling is applying now
   isFrameThrottled(timestamp) {
-    const { frameBudget, frameTime } = this;
-
-    if (frameBudget <= 0) {
-      return true;
-    }
-
-    if (frameTime) {
-      if (timestamp < frameTime + frameThrottlePeriod) {
+    if (this.frameTime) {
+      if (timestamp < this.frameTime + frameThrottlePeriod) {
         return true;
       }
     }
@@ -231,18 +222,12 @@ onmessage = function (e) {
         break;
       }
 
-      const { frameBudget, iterationsLimit, pause } = e.data;
-
-      if (typeof frameBudget != "undefined") {
-        panels.frameBudget = frameBudget;
+      if (typeof e.data.iterationsLimit != "undefined") {
+        panels.iterationsLimit = e.data.iterationsLimit;
       }
 
-      if (typeof iterationsLimit != "undefined") {
-        panels.iterationsLimit = iterationsLimit;
-      }
-
-      if (typeof pause != "undefined") {
-        panels.pause = pause;
+      if (typeof e.data.pause != "undefined") {
+        panels.pause = e.data.pause;
       }
 
       break;

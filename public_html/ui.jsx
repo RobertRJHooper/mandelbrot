@@ -1,5 +1,7 @@
 "use strict";
 
+var isNum = Number.isFinite
+
 class App extends React.Component {
     static defaultView = {
         center: complex(0),
@@ -14,9 +16,10 @@ class App extends React.Component {
             width: 0,
             height: 0,
 
+            mouseMode: 'pan', // 'pan' or 'box-select'
+            panCenter: null,
             sample: null,
             sampleVisible: false,
-
             infoModalVisible: false,
         }
 
@@ -31,10 +34,10 @@ class App extends React.Component {
             }
         });
 
-        this.onBoxSelection = this.onBoxSelection.bind(this);
+        this.onBoxSelect = this.onBoxSelect.bind(this);
         this.onPointHover = this.onPointHover.bind(this);
-        this.onInfoButtonClick = () => this.setState({ infoModalVisible: !this.state.infoModalVisible });
-        this.onInfoCloseClick = () => this.setState({ infoModalVisible: false });
+        this.onPan = this.onPan.bind(this);
+        this.onPanRelease = this.onPanRelease.bind(this);
     }
 
     /* get viewbox as specified in the URL, or return null */
@@ -89,55 +92,45 @@ class App extends React.Component {
 
     // inner render when we know the container dimensions
     renderContent() {
-        const {
-            center,
-            width,
-            height,
-            zoom,
-            sample,
-            sampleVisible,
-            infoModalVisible,
-        } = this.state;
-
         return (
             <div>
                 <MandelbrotSet
-                    center={center}
-                    zoom={zoom}
-                    width={width}
-                    height={height}
+                    center={this.state.center}
+                    zoom={this.state.zoom}
+                    width={this.state.width}
+                    height={this.state.height}
                 />
 
-                {sampleVisible ?
+                {this.state.sampleVisible &&
                     <SampleDisplay
-                        center={center}
-                        zoom={zoom}
-                        width={width}
-                        height={height}
-                        sample={sample}
+                        center={this.state.center}
+                        zoom={this.state.zoom}
+                        width={this.state.width}
+                        height={this.state.height}
+                        sample={this.state.sample}
                     />
-                    :
-                    <div></div>
                 }
 
                 <Selector
+                    mouseMode={this.state.mouseMode}
                     onPointHover={this.onPointHover}
-                    onBoxSelection={this.onBoxSelection}
+                    onBoxSelect={this.onBoxSelect}
+                    onPan={this.onPan}
+                    onPanRelease={this.onPanRelease}
                 />
 
                 <Navbar
-                    onResetClick={() => this.setState({ ...App.defaultView, infoModalVisible: false })}
-
-                    sampleActivated={sampleVisible}
-                    onSampleToggle={() => this.setState({ sampleVisible: !this.state.sampleVisible })}
-
-                    workInProgress="1"
-                    onInfoButtonClick={this.onInfoButtonClick}
+                    onReset={() => this.setState({ ...App.defaultView, infoModalVisible: false })}
+                    mouseMode={this.state.mouseMode}
+                    onMouseModeToggle={() => this.setState((state) => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
+                    sampleVisible={this.state.sampleVisible}
+                    onSampleToggle={() => this.setState((state) => ({ sampleVisible: !state.sampleVisible }))}
+                    onInfoToggle={() => this.setState((state) => ({ infoModalVisible: !state.infoModalVisible }))}
                 />
 
                 <InfoModal
-                    visible={infoModalVisible}
-                    onCloseClick={this.onInfoCloseClick}
+                    visible={this.state.infoModalVisible}
+                    onCloseClick={() => this.setState({ infoModalVisible: false })}
                 />
             </div>
         );
@@ -161,7 +154,39 @@ class App extends React.Component {
         this.resizeObserver.disconnect();
     }
 
-    onBoxSelection(box) {
+    onPointHover(x, y) {
+        this.setState((state, props) => {
+            const { center, zoom, width, height } = state;
+            const p = rectToImaginary(center, zoom, width, height, x, y);
+            return { sample: mbSample(p) };
+        });
+    }
+
+    onPan(dx, dy) {
+        this.setState((state, props) => {
+            const { center, zoom, width, height, panCenter } = state;
+
+            const p = rectToImaginary(
+                panCenter || center,
+                zoom,
+                width,
+                height,
+                state.width / 2 - dx,
+                state.height / 2 - dy
+            );
+
+            return {
+                panCenter: panCenter || center,
+                center: p,
+            };
+        });
+    }
+
+    onPanRelease() {
+        this.setState({ panCenter: null });
+    }
+
+    onBoxSelect(box) {
         this.setState((state, props) => {
             const { center, zoom, width, height } = state;
 
@@ -187,22 +212,7 @@ class App extends React.Component {
         });
     }
 
-    onPointHover(x, y) {
-        this.setState((state, props) => {
-            const { center, zoom, width, height } = state;
 
-            const point = rectToImaginary(
-                center,
-                zoom,
-                width,
-                height,
-                x,
-                y
-            );
-
-            return { sample: mbSample(point) };
-        });
-    }
 }
 
 class MandelbrotSet extends React.Component {
@@ -222,15 +232,12 @@ class MandelbrotSet extends React.Component {
 
     constructor(props) {
         super(props);
-
-        this.state = {
-            setupFlag: false,
-            modelClientFlag: 0,
-        }
-
-        this.canvas = React.createRef();
         this.model = new ModelClient();
-        this.model.onUpdate = () => this.setState((state, props) => ({ modelClientFlag: state.modelClientFlag + 1 }));
+        
+        // drawing canvas and loop
+        this.canvas = React.createRef();
+        this.running = false;
+        this.animationFrame = this.animationFrame.bind(this);
     }
 
     render() {
@@ -244,72 +251,71 @@ class MandelbrotSet extends React.Component {
         );
     }
 
-    draw(snaps, canvasOffsetX, canvasOffsetY, update) {
-        const { width, height } = this.props;
-
+    clearCanvas() {
         const canvas = this.canvas.current;
         const context = canvas.getContext('2d');
+        context.beginPath();
+        context.fillStyle = "grey";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
-        // clear canvas
-        if (!update) {
-            context.beginPath();
-            context.fillStyle = "grey";
-            context.fillRect(0, 0, canvas.width, canvas.height);
+    animationFrame(timestamp) {
+        const { width, height } = this.props;
+        const { canvasOffsetX, canvasOffsetY } = this.model;
+        const canvas = this.canvas.current;
+
+        if (canvas) {
+            const context = canvas.getContext('2d');
+
+            for (const snap of this.model.flush()) {
+                const { bitmap, canvasX, canvasY } = snap;
+
+                const x = canvasOffsetX + canvasX;
+                const y = canvasOffsetY + canvasY;
+
+                // check the snap is on canvas
+                const visible = x + bitmap.width >= 0
+                    && x < width
+                    && y + bitmap.height >= 0
+                    && y < height;
+
+                if (visible) context.drawImage(bitmap, x, y);
+            }
         }
 
-        // render each panel to canvas
-        for (const snap of snaps) {
-            const { bitmap, canvasX, canvasY } = snap;
-
-            const x = canvasOffsetX + canvasX;
-            const y = canvasOffsetY + canvasY;
-
-            // check the snap is on canvas
-            const outside = x + bitmap.width < 0 || x >= width
-                || y + bitmap.height < 0 || y >= height;
-
-            if (!outside) {
-                context.drawImage(bitmap, x, y);
-            }
-        };
+        // loop
+        if (this.running) window.requestAnimationFrame(this.animationFrame);
     }
 
     componentDidMount() {
         this.model.initiate();
-        this.setState({ setupFlag: true });
+        this.running = true;
+        window.requestAnimationFrame(this.animationFrame);
+
+        const { zoom, center, width, height } = this.props;
+        this.clearCanvas();
+        this.model.setZoom(zoom);
+        this.model.setCenter(center, width, height);
     }
 
     componentDidUpdate(prevProps, prevState) {
         const { zoom, center, width, height } = this.props;
-        const { setupFlag, modelClientFlag } = this.state;
-        const { model } = this;
 
-        // console.log('state', this.state, prevState);
-        // console.log('props', this.props, prevProps);
-        const setup = setupFlag != prevState.setupFlag;
-
-        if (zoom != prevProps.zoom || setup) {
+        if (zoom != prevProps.zoom) {
             console.debug('update to zoom level', zoom);
-            this.draw([], 0, 0, false);
-            model.setZoom(zoom);
-            model.resetBudget();
+            this.clearCanvas();
+            this.model.setZoom(zoom);
         }
 
-        // set center point
-        if (center != prevProps.center || width != prevProps.width || height != prevProps.height || setup) {
+        if (center != prevProps.center || width != prevProps.width || height != prevProps.height) {
             console.debug('update to center, width or height', center, width, height);
-            model.setCenter(center, width, height);
-            this.draw(model.full(), model.canvasOffsetX, model.canvasOffsetY, false);
-        }
-
-        // process new snaps
-        if (modelClientFlag != prevState.modelClientFlag) {
-            this.draw(model.flush(), model.canvasOffsetX, model.canvasOffsetY, true);
-            model.resetBudget();
+            this.clearCanvas();
+            this.model.setCenter(center, width, height);
         }
     }
 
     componentWillUnmount() {
+        this.running = false;
         this.model.terminate();
     }
 }
@@ -412,20 +418,54 @@ class SampleDisplay extends React.Component {
     }
 }
 
-// class to handle zooming, selecting, hovering
+/* Component for displaying the current mouse selected zoom box */
+class SelectorZoomBox extends React.Component {
+    static defaultProps = {
+        rect: null,
+    }
+
+    render() {
+        const { top, left, width, height } = this.props.rect;
+        return <div className="selector-box" style={{ top: top, left: left, width: width, height: height }}></div>
+    }
+}
+
+
+/* class to handle zooming, selecting, hovering */
 class Selector extends React.Component {
+    static defaultProps = {
+        // mouseMode determines what the mouse does 
+        // 'pan' for panning
+        // 'box-select' for selecting a rectangle zoom box
+        mouseMode: 'pan',
+
+        // callbacks
+        onPan: null,
+        onPanRelease: null,
+        onZoomStart: null,
+        onZoomUpdate: null,
+        onZoomRelease: null,
+        onBoxSelect: null,
+        onPointSelect: null,
+    }
+
     constructor(props) {
         super(props);
 
         this.state = {
-            clickedX: null,
-            clickedY: null,
-            currentX: null,
-            currentY: null,
+            selectedPointX: null,
+            selectedPointY: null,
+            currentPointX: null,
+            currentPointY: null,
+            pinchStart: null,
+            pinchCurrent: null,
         }
 
+        // selection surface reference
         this.div = React.createRef();
 
+        // div that were listening to events on and event handlers
+        this.divListening = null;
         this.onMouseMove = this.onMouseMove.bind(this);
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
@@ -435,80 +475,106 @@ class Selector extends React.Component {
         this.onTouchMove = this.onTouchMove.bind(this);
     }
 
-    render() {
-        const { clickedX, clickedY, currentX, currentY } = this.state;
+    getCursorClass() {
+        if (false) {
+            return "zooming-in";
+        } else if(false) {
+            return "zooming-out";
+        } else if (this.props.mouseMode == "box-select") {
+            return "boxselecting";
+        } else if (this.props.mouseMode == "pan") {
+            if(isNum(this.state.selectedPointX) && isNum(this.state.selectedPointY)) {
+                return "grabbing";
+            } else {
+                return "grabbable";
+            }
+        } else {
+            console.error("unknown state selecting cursor");
+            return "";
+        }
 
-        const showBox = clickedX && clickedY && currentX && currentY;
-        const box = showBox && this.boxGeometry(clickedX, clickedY, currentX, currentY);
+    }
+
+    render() {
+        const { selectedPointX, selectedPointY, currentPointX, currentPointY } = this.state;
+        const validBox = this.props.mouseMode == "box-select"
+            && isNum(selectedPointX)
+            && isNum(selectedPointY)
+            && isNum(currentPointX)
+            && isNum(currentPointY);
+
+        // zoom box
+        let box;
+
+        if (validBox) {
+            const rect = this.boxGeometry(selectedPointX, selectedPointY, currentPointX, currentPointY);
+            if (rect.width || rect.height) box = <SelectorZoomBox rect={rect} />;
+        }
 
         return (
-            <div ref={this.div}
-                className="selector"
-                onMouseDown={this.onMouseDown}
-                onMouseUp={this.onMouseUp}
-            >
-                <div
-                    className="selector-box"
-                    style={showBox ? { ...box, visibility: "visible" } : { visibility: "hidden" }
-                    }>
-                </div>
+            <div ref={this.div} className={"selector " + this.getCursorClass()}>
+                {box}
             </div>
         );
+    }    
+
+    removeListeners() {
+        window.removeEventListener("mousemove", this.onMouseMove);
+        window.removeEventListener("mouseup", this.onMouseUp);
+
+        // client area listeners
+        const div = this.divListening;
+        if (div) {
+            div.removeEventListener("mousedown", this.onMouseDown);
+            div.removeEventListener("touchstart", this.onTouchStart);
+            div.removeEventListener("touchend", this.onTouchEnd);
+            div.removeEventListener("touchcancel", this.onTouchCancel);
+            div.removeEventListener("touchmove", this.onTouchMove);
+            this.divListening = null;
+        }
+    }
+
+    setListeners(div) {
+        this.removeListeners();
+
+        // global listeners
+        window.addEventListener("mousemove", this.onMouseMove);
+        window.addEventListener("mouseup", this.onMouseUp);
+
+        // client area listeners
+        if (div) {
+            div.addEventListener("mousedown", this.onMouseDown);
+            div.addEventListener("touchstart", this.onTouchStart);
+            div.addEventListener("touchend", this.onTouchEnd);
+            div.addEventListener("touchcancel", this.onTouchCancel);
+            div.addEventListener("touchmove", this.onTouchMove);
+            this.divListening = div;
+        }
     }
 
     componentDidMount() {
-        window.addEventListener("mousemove", this.onMouseMove);
-        window.addEventListener("mouseup", this.onMouseUp);
-        window.addEventListener("touchstart", this.onTouchStart);
-        window.addEventListener("touchend", this.onTouchEnd);
-        window.addEventListener("touchcancel", this.onTouchCancel);
-        window.addEventListener("touchmove", this.onTouchMove);
-    }
-
-    componentWillUnmount() {
-        window.removeEventListener("mousemove", this.onMouseMove);
-        window.removeEventListener("mouseup", this.onMouseUp);
-        window.removeEventListener("touchstart", this.onTouchStart);
-        window.removeEventListener("touchend", this.onTouchEnd);
-        window.removeEventListener("touchcancel", this.onTouchCancel);
-        window.removeEventListener("touchmove", this.onTouchMove);
+        this.setListeners(this.div.current);
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { onPointHover, onBoxSelection } = this.props;
-        const { currentX, currentY, clickedX, clickedY } = this.state;
+        const div = this.div.current;
 
-        const isNum = Number.isFinite
-        const current = isNum(currentX) && isNum(currentY);
-        const clicked = isNum(clickedX) && isNum(clickedY);
-        const prevClicked = isNum(prevState.clickedX) && isNum(prevState.clickedY);
-
-        // hover callback
-        if (onPointHover && current && !clicked) {
-            if (currentX != prevState.currentX || currentY != prevState.currentY) {
-                onPointHover(currentX + 0, currentY + 0);
-            }
-        }
-
-        // box selection callback
-        if (onBoxSelection && current && !clicked && prevClicked) {
-            onBoxSelection(this.boxGeometry(
-                prevState.clickedX,
-                prevState.clickedY,
-                currentX,
-                currentY
-            ));
+        if (this.divListening != div) {
+            this.setListeners(div);
         }
     }
 
-    // get box dimensions maintaining aspect ration of div container
-    // the box has the usual rectangle coordinate system (vertical increasing downwards)
-    boxGeometry(clickedX, clickedY, currentX, currentY) {
+    componentWillUnmount() {
+        this.removeListeners();
+    }
+
+    // get box geometry with corners specified
+    boxGeometry(initialX, initialY, currentX, currentY) {
         const rect = {
-            left: clickedX,
-            top: clickedY,
-            width: currentX - clickedX,
-            height: currentY - clickedY,
+            left: initialX,
+            top: initialY,
+            width: currentX - initialX,
+            height: currentY - initialY,
         };
 
         // correct inside out rectangle
@@ -525,39 +591,88 @@ class Selector extends React.Component {
         return rect;
     }
 
-    onMouseMove(e) {
+    // convert client coordinates to local div coordinates
+    getLocalCoordinates(clientX, clientY, clip = true) {
         const rect = this.div.current.getBoundingClientRect();
 
         // clip cursor position to the app frame
-        const clientX = Math.min(Math.max(rect.left, e.clientX), rect.right);
-        const clientY = Math.min(Math.max(rect.top, e.clientY), rect.bottom);
+        let x = clientX - rect.left;
+        let y = clientY - rect.top;
 
-        this.setState({
-            currentX: clientX - rect.left,
-            currentY: clientY - rect.top,
-        });
+        if (clip) {
+            x = Math.min(Math.max(0, x), rect.width);
+            y = Math.min(Math.max(0, y), rect.height);
+        }
+
+        return [x, y];
+    }
+
+    handleSelect(clientX, clientY) {
+        const [selectedPointX, selectedPointY] = this.getLocalCoordinates(clientX, clientY);
+        this.setState({ selectedPointX: selectedPointX, selectedPointY: selectedPointY });
+    }
+
+    handleMove(clientX, clientY) {
+        const [currentPointX, currentPointY] = this.getLocalCoordinates(clientX, clientY);
+        const { selectedPointX, selectedPointY } = this.state;
+        const selected = isNum(selectedPointX) && isNum(selectedPointY);
+
+        // callbacks
+        if (!selected) {
+            this.props.onPointHover && this.props.onPointHover(currentPointX, currentPointY);
+        } else if (this.props.mouseMode == "pan") {
+            this.props.onPan && this.props.onPan(currentPointX - selectedPointX, currentPointY - selectedPointY);
+        }
+
+        // update state
+        this.setState({ currentPointX: currentPointX, currentPointY: currentPointY });
+    }
+
+    handleRelease(clientX, clientY) {
+        const [releasePointX, releasePointY] = this.getLocalCoordinates(clientX, clientY);
+        const { selectedPointX, selectedPointY, currentPointX, currentPointY } = this.state;
+        const selected = isNum(selectedPointX) && isNum(selectedPointY);
+        const delta = (releasePointX != selectedPointX) || (releasePointY != selectedPointY);
+
+        // callbacks
+        if (!delta) {
+            this.props.onPointSelect && this.props.onPointSelect(releasePointX, releasePointY);
+        } else if (this.props.mouseMode == "pan") {
+            this.props.onPanRelease && this.props.onPanRelease();
+        } else if (this.props.mouseMode == "box-select") {
+            if (selected) {
+                const box = this.boxGeometry(selectedPointX, selectedPointY, releasePointX, releasePointY);
+                this.props.onBoxSelect && box.width && box.height && this.props.onBoxSelect(box);
+            }
+        }
+
+        // update state
+        this.setState({ selectedPointX: null, selectedPointY: null });
     }
 
     onMouseDown(e) {
         if (e.button == 0) {
-            const rect = this.div.current.getBoundingClientRect();
+            e.preventDefault();
+            this.handleSelect(e.clientX, e.clientY);
+        };
+    }
 
-            this.setState({
-                clickedX: e.clientX - rect.left,
-                clickedY: e.clientY - rect.top,
-            });
-        }
+    onMouseMove(e) {
+        this.handleMove(e.clientX, e.clientY);
     }
 
     onMouseUp(e) {
-        this.setState({
-            clickedX: null,
-            clickedY: null,
-        });
+        if (e.button == 0) {
+            this.handleRelease(e.clientX, e.clientY);
+        };
     }
 
     onTouchStart(e) {
         console.debug('touch start', e);
+    }
+
+    onTouchMove(e) {
+        console.debug('touch move', e);
     }
 
     onTouchEnd(e) {
@@ -567,13 +682,19 @@ class Selector extends React.Component {
     onTouchCancel(e) {
         console.debug('touch cancel', e);
     }
-
-    onTouchMove(e) {
-        console.debug('touch move', e);
-    }
 }
 
 class Navbar extends React.Component {
+    static defaultProps = {
+        mouseMode: 'pan', // 'pan' and 'box-select' mouse mode
+        sampleVisible: false,
+
+        onReset: null,
+        onMouseModeToggle: null,
+        onSampleToggle: null,
+        onInfoToggle: null,
+    }
+
     constructor(props) {
         super(props);
     }
@@ -581,34 +702,36 @@ class Navbar extends React.Component {
     render() {
         return (
             <div className="navbar">
-                <div className="navbar-item"
-                    onMouseDown={() => this.setState({ highlightResetButton: true })}
-                    onMouseUp={() => this.setState({ highlightResetButton: false })}
-                    onClick={this.props.onResetClick}>
+                <div className="navbar-item" onClick={this.props.onReset}>
                     {/* house icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.707 1.5Z" />
                         <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293l6-6Z" />
                     </svg>
                 </div>
-                <div className={this.props.sampleButtonActivated ? "navbar-item navbar-item-active" : "navbar-item"}
-                    onClick={this.props.onSampleToggle}>
+
+                <div className="navbar-item" onClick={this.props.onMouseModeToggle} >
+                    {this.props.mouseMode == 'pan' ?
+                        /* selection square icon to activate box selection */
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
+                            <path d="M2 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM0 2a2 2 0 0 1 3.937-.5h8.126A2 2 0 1 1 14.5 3.937v8.126a2 2 0 1 1-2.437 2.437H3.937A2 2 0 1 1 1.5 12.063V3.937A2 2 0 0 1 0 2zm2.5 1.937v8.126c.703.18 1.256.734 1.437 1.437h8.126a2.004 2.004 0 0 1 1.437-1.437V3.937A2.004 2.004 0 0 1 12.063 2.5H3.937A2.004 2.004 0 0 1 2.5 3.937zM14 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM2 13a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm12 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />
+                        </svg>
+                        :
+                        /* selection hand icon to activate panning */
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
+                            <path d="M8.5 1.75v2.716l.047-.002c.312-.012.742-.016 1.051.046.28.056.543.18.738.288.273.152.456.385.56.642l.132-.012c.312-.024.794-.038 1.158.108.37.148.689.487.88.716.075.09.141.175.195.248h.582a2 2 0 0 1 1.99 2.199l-.272 2.715a3.5 3.5 0 0 1-.444 1.389l-1.395 2.441A1.5 1.5 0 0 1 12.42 16H6.118a1.5 1.5 0 0 1-1.342-.83l-1.215-2.43L1.07 8.589a1.517 1.517 0 0 1 2.373-1.852L5 8.293V1.75a1.75 1.75 0 0 1 3.5 0z" />
+                        </svg>
+                    }
+                </div>
+
+                <div className={this.props.sampleVisible ? "navbar-item navbar-item-active" : "navbar-item"} onClick={this.props.onSampleToggle}>
                     {/* cursor icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
                     </svg>
                 </div>
-                <div className="navbar-item">
-                    <div className={this.props.workInProgress ? "navbar-icon-working" : ""}>
-                        {/* fan icon */}
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
-                            <path d="M10 3c0 1.313-.304 2.508-.8 3.4a1.991 1.991 0 0 0-1.484-.38c-.28-.982-.91-2.04-1.838-2.969a8.368 8.368 0 0 0-.491-.454A5.976 5.976 0 0 1 8 2c.691 0 1.355.117 1.973.332.018.219.027.442.027.668Zm0 5c0 .073-.004.146-.012.217 1.018-.019 2.2-.353 3.331-1.006a8.39 8.39 0 0 0 .57-.361 6.004 6.004 0 0 0-2.53-3.823 9.02 9.02 0 0 1-.145.64c-.34 1.269-.944 2.346-1.656 3.079.277.343.442.78.442 1.254Zm-.137.728a2.007 2.007 0 0 1-1.07 1.109c.525.87 1.405 1.725 2.535 2.377.2.116.402.222.605.317a5.986 5.986 0 0 0 2.053-4.111c-.208.073-.421.14-.641.199-1.264.339-2.493.356-3.482.11ZM8 10c-.45 0-.866-.149-1.2-.4-.494.89-.796 2.082-.796 3.391 0 .23.01.457.027.678A5.99 5.99 0 0 0 8 14c.94 0 1.83-.216 2.623-.602a8.359 8.359 0 0 1-.497-.458c-.925-.926-1.555-1.981-1.836-2.96-.094.013-.191.02-.29.02ZM6 8c0-.08.005-.16.014-.239-1.02.017-2.205.351-3.34 1.007a8.366 8.366 0 0 0-.568.359 6.003 6.003 0 0 0 2.525 3.839 8.37 8.37 0 0 1 .148-.653c.34-1.267.94-2.342 1.65-3.075A1.988 1.988 0 0 1 6 8Zm-3.347-.632c1.267-.34 2.498-.355 3.488-.107.196-.494.583-.89 1.07-1.1-.524-.874-1.406-1.733-2.541-2.388a8.363 8.363 0 0 0-.594-.312 5.987 5.987 0 0 0-2.06 4.106c.206-.074.418-.14.637-.199ZM8 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" />
-                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14Zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16Z" />
-                        </svg>
-                    </div>
-                </div>
-                <div className="navbar-item"
-                    onClick={() => this.props.onInfoButtonClick()}>
+
+                <div className="navbar-item" onClick={this.props.onInfoToggle}>
                     {/* info icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="m9.708 6.075-3.024.379-.108.502.595.108c.387.093.464.232.38.619l-.975 4.577c-.255 1.183.14 1.74 1.067 1.74.72 0 1.554-.332 1.933-.789l.116-.549c-.263.232-.65.325-.905.325-.363 0-.494-.255-.402-.704l1.323-6.208Zm.091-2.755a1.32 1.32 0 1 1-2.64 0 1.32 1.32 0 0 1 2.64 0Z" />
@@ -618,7 +741,6 @@ class Navbar extends React.Component {
 
         );
     }
-
 }
 
 class InfoModal extends React.Component {

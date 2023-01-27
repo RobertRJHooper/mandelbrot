@@ -36,7 +36,7 @@ class ModelClient {
 
         // snaps of panels and updated snaps since last flush
         this.snaps = new Map();
-        this.updates = [];
+        this.updates = new Map();
 
         // throttling defaults
         this.frameBudget = 2;
@@ -73,7 +73,7 @@ class ModelClient {
 
         // clear snap caches
         this.snaps = new Map();
-        this.updates = [];
+        this.updates = new Map();
 
         // save state locally
         this.zoom = zoom;
@@ -103,10 +103,12 @@ class ModelClient {
             return;
         }
 
+        // update to all present snaps
+        this.updates = new Map(this.snaps);
+
         // save working state
-        const { zoom } = this;
-        this.canvasOffsetX = Math.round(width / 2 - center.re * zoom);
-        this.canvasOffsetY = Math.round(height / 2 + center.im * zoom);
+        this.canvasOffsetX = Math.round(width / 2 - center.re * this.zoom);
+        this.canvasOffsetY = Math.round(height / 2 + center.im * this.zoom);
 
         // send center to workers
         this.workers.forEach(worker => {
@@ -117,51 +119,34 @@ class ModelClient {
                 height: height,
             });
         });
+
+        // set budget in workers
+        for (const worker of this.workers) {
+            worker.postMessage({
+                command: 'limit',
+                iterationsLimit: this.iterationsLimit,
+            });
+        }
     }
 
     workerMessage(message) {
-        const data = message.data;
-        const { zoom } = this;
-        const expired = data.zoom != zoom;
-        
-        console.debug(
-                'frame received with', data.snaps.length, 'snaps.',
-                'adding to', this.updates.length, 'existing updates, and total cached snaps', this.snaps.size
-        );
+        console.debug('frame received with', message.data.snaps.length, 'snaps.', 'adding to', this.updates.size, 'existing updates, and total cached snaps', this.snaps.size);
+        const expired = message.data.zoom != this.zoom;        
 
         if (!expired) {
-            for (const snap of data.snaps) {
-                this.updates.push(snap);
+            for (const snap of message.data.snaps) {
+                this.updates.set(snap.key, snap);
                 this.snaps.set(snap.key, snap);
             }
         } else {
-            console.debug("expired snaps received from worker", zoom);
+            console.debug("expired snaps received from worker");
         }
-
-        // notification callback - needed even if the snaps have expired to reset budget later
-        this.onUpdate && this.onUpdate();
-    }
-
-    /* get all snaps available */
-    full() {
-        return [...this.snaps.values()];
     }
 
     /* get updates since last flush */
     flush() {
-        const snaps = this.updates;
-        this.updates = [];
-        return snaps;
-    }
-
-    // reset frame budget in workers
-    resetBudget() {
-        for (const worker of this.workers) {
-            worker.postMessage({
-                command: 'limit',
-                frameBudget: this.frameBudget,
-                iterationsLimit: this.iterationsLimit,
-            });
-        }
+        const updates = this.updates;
+        this.updates = new Map();
+        return updates.values();
     }
 }
