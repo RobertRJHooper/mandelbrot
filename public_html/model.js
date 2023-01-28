@@ -16,7 +16,7 @@ function mbInPrimary(re, im) {
   // full calculation (principle square root)
   // |sqrt(1 - 4c) - 1| < 1 with c = re + i * im
 
-  // a = 1 - 4c
+  // a = 1 - 4z
   const a_re = -4 * re + 1;
   const a_im = -4 * im;
   const a_r = Math.sqrt(a_re * a_re + a_im * a_im);
@@ -25,12 +25,12 @@ function mbInPrimary(re, im) {
   const b_re = Math.sqrt((a_r + a_re) / 2);
   const b_im = Math.sqrt((a_r - a_re) / 2) * Math.sign(a_im);
 
-  // c = b - 1 = sqrt(1 - 4c) - 1
-  const c_re = b_re - 1;
-  const c_im = b_im;
+  // d = b - 1 = sqrt(1 - 4z) - 1
+  const d_re = b_re - 1;
+  const d_im = b_im;
 
-  // |c| < 1
-  return c_re * c_re + c_im * c_im < 1;
+  // |d| < 1
+  return d_re * d_re + d_im * d_im < 1;
 }
 
 // is the point in the secondary circle when zn has period two in limit?
