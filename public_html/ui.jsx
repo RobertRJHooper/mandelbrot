@@ -256,7 +256,7 @@ class MandelbrotSet extends React.Component {
         const canvas = this.canvas.current;
         const context = canvas.getContext('2d');
         context.beginPath();
-        context.fillStyle = "grey";
+        context.fillStyle = "black";
         context.fillRect(0, 0, canvas.width, canvas.height);
     }
 
