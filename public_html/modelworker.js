@@ -81,7 +81,7 @@ class Panels {
       for (let panelY = yMin; panelY < yMax; panelY++) {
         if ((panelX + panelY - offset) % step) continue;
 
-        const key = `${panelX} ${panelY} ${step} ${offset}`;
+        const key = `${panelX} ${panelY}`;
         let panel = this.panels.get(key);
 
         // create panel if it is not already in the cache
