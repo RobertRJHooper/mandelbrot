@@ -4,7 +4,8 @@ var isNum = Number.isFinite
 
 class App extends React.Component {
     static defaultView = {
-        center: complex(0),
+        center_re: 0,
+        center_im: 0,
         zoom: 200,
     };
 
@@ -17,8 +18,13 @@ class App extends React.Component {
             width: 0,
             height: 0,
 
-            mouseMode: 'pan', // 'pan' or 'box-select'
-            panCenter: null,
+            // 'pan' or 'box-select'
+            mouseMode: 'pan',
+
+            // center at start of pan drag
+            pan_re: null,
+            pan_im: null,
+
             sample: null,
             sampleVisible: false,
             infoModalVisible: false,
@@ -38,7 +44,7 @@ class App extends React.Component {
         this.onPointHover = this.onPointHover.bind(this);
         this.onPan = this.onPan.bind(this);
         this.onPanRelease = this.onPanRelease.bind(this);
-        this.pushURLDebounced = _.debounce(() => this.pushURL(this.state.center, this.state.zoom), 1000);
+        this.pushURLDebounced = _.debounce(() => this.pushURL(this.state.center_re, this.state.center_im, this.state.zoom), 1000);
     }
 
     /* get viewbox as specified in the URL, or return null */
@@ -48,29 +54,30 @@ class App extends React.Component {
 
         const x = Number(searchParams.get('x'));
         const y = Number(searchParams.get('y'));
-        const z = Number(searchParams.get('z'));
-        const valid = isNum(x) && isNum(y) && isNum(z);
+        const zoom = Number(searchParams.get('zoom'));
+        const valid = isNum(x) && isNum(y) && isNum(zoom);
 
         // bad or missing numbers
         if (!valid) return {};
 
         return {
-            center: complex(x, y),
-            zoom: z,
+            center_re: x,
+            center_im: y,
+            zoom: zoom,
         };
     }
 
     /* push view to the URL if it's not already there */
-    pushURL(center, zoom) {
+    pushURL(center_re, center_im, zoom) {
         const current = this.pullURL();
-        const changed = current.center != center || current.zoom != zoom;
+        const changed = current.center_re != center_re || current.center_im != center_im || current.zoom != zoom;
 
         if (changed) {
             const url = new URL(window.location);
             const searchParams = url.searchParams;
-            searchParams.set('x', center.re);
-            searchParams.set('y', center.im);
-            searchParams.set('z', zoom);
+            searchParams.set('x', center_re);
+            searchParams.set('y', center_im);
+            searchParams.set('zoom', zoom);
             window.history.pushState({}, '', url);
         }
     }
@@ -101,7 +108,8 @@ class App extends React.Component {
         return (
             <div>
                 <MandelbrotSet
-                    center={this.state.center}
+                    center_re={this.state.center_re}
+                    center_im={this.state.center_im}
                     zoom={this.state.zoom}
                     width={this.state.width}
                     height={this.state.height}
@@ -109,7 +117,8 @@ class App extends React.Component {
 
                 {this.state.sampleVisible &&
                     <SampleDisplay
-                        center={this.state.center}
+                        center_re={this.state.center_re}
+                        center_im={this.state.center_im}
                         zoom={this.state.zoom}
                         width={this.state.width}
                         height={this.state.height}
@@ -159,18 +168,23 @@ class App extends React.Component {
 
     onPointHover(x, y) {
         this.setState((state, props) => {
-            const { center, zoom, width, height } = state;
-            const p = rectToImaginary(center, zoom, width, height, x, y);
-            return { sample: mbSample(p) };
+            const { center_re, center_im, zoom, width, height } = state;
+            const [re, im] = rectToImaginary(center_re, center_im, zoom, width, height, x, y);
+            return { sample: mbSample(re, im) };
         });
     }
 
     onPan(dx, dy) {
         this.setState((state, props) => {
-            const { center, zoom, width, height, panCenter } = state;
+            const { center_re, center_im, zoom, width, height, pan_re, pan_im } = state;
 
-            const p = rectToImaginary(
-                panCenter || center,
+            // if pan_re not set yet then set it to the current center point
+            const p_re = isNum(pan_re) ? pan_re : center_re;
+            const p_im = isNum(pan_im) ? pan_im : center_im;
+
+            const [re, im] = rectToImaginary(
+                p_re,
+                p_im,
                 zoom,
                 width,
                 height,
@@ -179,22 +193,26 @@ class App extends React.Component {
             );
 
             return {
-                panCenter: panCenter || center,
-                center: p,
+                pan_re: p_re,
+                pan_im: p_im,
+                center_re: re,
+                center_im: im,
             };
         });
     }
 
     onPanRelease() {
-        this.setState({ panCenter: null });
+        this.setState({ pan_re: null, pan_im: null });
     }
 
     onBoxSelect(box) {
         this.setState((state, props) => {
-            const { center, zoom, width, height } = state;
+            const { center_re, center_im, zoom, width, height } = state;
 
-            const newCenter = rectToImaginary(
-                center,
+            // new center
+            const [re, im] = rectToImaginary(
+                center_re,
+                center_im,
                 zoom,
                 width,
                 height,
@@ -207,10 +225,11 @@ class App extends React.Component {
             const factor = fitWidth ? width / box.width : state.height / box.height;
             const newZoom = zoom * factor;
 
-            console.log("sub box selected with center", newCenter, "magnifying x", factor, 'to zoom level', newZoom);
+            console.log("sub box selected with center", center_re, center_im, "magnifying x", factor, 'to zoom level', newZoom);
 
             return {
-                center: newCenter,
+                center_re: re,
+                center_im: im,
                 zoom: newZoom,
                 mouseMode: 'pan',
             }
@@ -224,7 +243,8 @@ class MandelbrotSet extends React.Component {
     static framePeriod = 1000 / 10;
 
     static defaultProps = {
-        center: complex(0),
+        center_re: 0,
+        center_im: 0,
 
         // pixels per unit length of imaginary plane
         zoom: 100,
@@ -254,15 +274,6 @@ class MandelbrotSet extends React.Component {
                 className="mandelbrotset">
             </canvas>
         );
-    }
-
-    clearCanvas() {
-        const canvas = this.canvas.current;
-        const context = canvas.getContext('2d');
-        return;
-        context.beginPath();
-        context.fillStyle = "black";
-        context.fillRect(0, 0, canvas.width, canvas.height);
     }
 
     animationFrame(timestamp) {
@@ -314,25 +325,27 @@ class MandelbrotSet extends React.Component {
         this.running = true;
         window.requestAnimationFrame(this.animationFrame);
 
-        const { zoom, center, width, height } = this.props;
-        this.clearCanvas();
+        const { zoom, center_re, center_im, width, height } = this.props;
         this.model.setZoom(zoom);
-        this.model.setCenter(center, width, height);
+        this.model.setCenter(center_re, center_im, width, height);
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { zoom, center, width, height } = this.props;
+        const { zoom, center_re, center_im, width, height } = this.props;
 
         if (zoom != prevProps.zoom) {
             console.debug('update to zoom level', zoom);
-            this.clearCanvas();
             this.model.setZoom(zoom);
         }
 
-        if (center != prevProps.center || width != prevProps.width || height != prevProps.height) {
-            console.debug('update to center, width or height', center, width, height);
-            this.clearCanvas();
-            this.model.setCenter(center, width, height);
+        const update = center_re != prevProps.center_re
+            || center_im != prevProps.center_im
+            || width != prevProps.width
+            || height != prevProps.height;
+
+        if (update) {
+            console.debug('update to center, width or height', center_re, center_im, width, height);
+            this.model.setCenter(center_re, center_im, width, height);
         }
     }
 
@@ -357,7 +370,7 @@ class SampleDisplay extends React.Component {
     }
 
     draw() {
-        const { center, zoom, width, height, sample } = this.props;
+        const { center_re, center_im, zoom, width, height, sample } = this.props;
         const canvas = this.canvas.current;
 
         // no canvas to draw on
@@ -375,7 +388,9 @@ class SampleDisplay extends React.Component {
         }
 
         // convert coordinates to rectangle
-        const points = sample.zi.map(z => imaginarytoRect(center, zoom, width, height, z));
+        const points = sample.zi.map(([z_re, z_im]) =>
+            imaginarytoRect(center_re, center_im, zoom, width, height, z_re, z_im)
+        );
 
         // draw line between points
         context.beginPath();
@@ -396,15 +411,15 @@ class SampleDisplay extends React.Component {
     }
 
     render() {
-        const { center, zoom, width, height, sample } = this.props;
+        const { center_re, center_im, zoom, width, height, sample } = this.props;
 
         // no sample supplied
         if (!sample) {
             return;
         }
 
-        const point = sample.zi[1];
-        const [tooltipLeft, tooltipTop] = imaginarytoRect(center, zoom, width, height, point);
+        const [point_re, point_im] = sample.zi[1];
+        const [tooltipLeft, tooltipTop] = imaginarytoRect(center_re, center_im, zoom, width, height, point_re, point_im);
         const escape = Number.isFinite(sample.escapeAge);
 
         return (
@@ -414,8 +429,8 @@ class SampleDisplay extends React.Component {
 
                 {/* tooltip */}
                 <div className="sample-infobox" style={{ left: tooltipLeft, top: tooltipTop }}>
-                    <p>{SampleDisplay.floatFormat(point.re)}</p>
-                    <p>{SampleDisplay.floatFormat(point.im)}i</p>
+                    <p>{SampleDisplay.floatFormat(point_re)}</p>
+                    <p>{SampleDisplay.floatFormat(point_im)}i</p>
                     <hr></hr>
                     <p>
                         z<sub>n</sub>
@@ -514,7 +529,6 @@ class Selector extends React.Component {
             console.error("unknown state selecting cursor");
             return "";
         }
-
     }
 
     render() {

@@ -1,21 +1,18 @@
 "use strict";
 
-// import math functions into global namespace
-var { complex, conj, add, subtract, multiply, divide, ceil, floor, sqrt } = math;
-
 /* helper to convert pixel coordinates to imaginary plane point */
-function rectToImaginary(center, zoom, width, height, x, y) {
-    return complex(
-        center.re + (x - width / 2) / zoom,
-        center.im - (y - height / 2) / zoom,
-    );
+function rectToImaginary(center_re, center_im, zoom, width, height, x, y) {
+    return [
+        center_re + (x - width / 2) / zoom,
+        center_im - (y - height / 2) / zoom,
+    ];
 }
 
 /* helper to convert imaginary plane point to pixel coordinates */
-function imaginarytoRect(center, zoom, width, height, point) {
+function imaginarytoRect(center_re, center_im, zoom, width, height, point_re, point_im) {
     return [
-        width / 2 + (point.re - center.re) * zoom,
-        height / 2 - (point.im - center.im) * zoom
+        width / 2 + (point_re - center_re) * zoom,
+        height / 2 - (point_im - center_im) * zoom
     ];
 }
 
@@ -86,7 +83,7 @@ class ModelClient {
     }
 
     /* set the center in the workers */
-    setCenter(center, width, height) {
+    setCenter(center_re, center_im, width, height) {
         if (!width || !height) {
             console.debug("trivial view, nothing to do");
             return;
@@ -101,14 +98,15 @@ class ModelClient {
         this.updates = new Map(this.snaps);
 
         // save working state
-        this.canvasOffsetX = Math.round(width / 2 - center.re * this.zoom);
-        this.canvasOffsetY = Math.round(height / 2 + center.im * this.zoom);
+        this.canvasOffsetX = Math.round(width / 2 - center_re * this.zoom);
+        this.canvasOffsetY = Math.round(height / 2 + center_im * this.zoom);
 
         // send center to workers
         this.workers.forEach(worker => {
             worker.postMessage({
                 command: 'center',
-                center: center,
+                center_re: center_re,
+                center_im: center_im,
                 width: width,
                 height: height,
             });

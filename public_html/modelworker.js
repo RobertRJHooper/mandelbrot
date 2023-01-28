@@ -1,13 +1,9 @@
 "use strict";
 
 importScripts(
-  'https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.5.0/math.js',
   'https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js',
   'model.js'
 );
-
-// import math functions into global namespace
-var { complex, conj, add, subtract, multiply, divide, ceil, floor, sqrt } = math;
 
 // minmum period between image posts
 const frameThrottlePeriod = 250;
@@ -16,8 +12,8 @@ const frameThrottlePeriod = 250;
 class Panel extends MandelbrotGrid {
   static length = 32;
 
-  constructor(key, center, zoom, canvasX, canvasY) {
-    super(center.re, center.im, zoom, Panel.length, Panel.length);
+  constructor(key, center_re, center_im, zoom, canvasX, canvasY) {
+    super(center_re, center_im, zoom, Panel.length, Panel.length);
     this.key = key;
     this.canvasX = canvasX;
     this.canvasY = canvasY;
@@ -70,22 +66,26 @@ class Panels {
   }
 
   // set panels around the point that cover width and height
-  setCenter(center, width, height) {
+  setCenter(center_re, center_im, width, height) {
     const { zoom, step, offset } = this;
 
     // save current point
-    this.center = center;
+    this.center_re = center_re;
+    this.center_im = center_im;
 
     // total view box in units of panels about origin
-    const pCenter = divide(multiply(center, zoom), Panel.length);
-    const pWidth = width / Panel.length;
-    const pHeight = height / Panel.length;
+    const viewWidth = width / Panel.length;
+    const viewHeight = height / Panel.length;
+
+    // panel center in units of panels
+    const panel_re = center_re * zoom / Panel.length;
+    const panel_im = center_im * zoom / Panel.length;
 
     // viewbox in panels
-    const xMin = floor(pCenter.re - pWidth / 2);
-    const xMax = ceil(pCenter.re + pWidth / 2);
-    const yMin = floor(pCenter.im - pHeight / 2);
-    const yMax = ceil(pCenter.im + pHeight / 2);
+    const xMin = Math.floor(panel_re - viewWidth / 2);
+    const xMax = Math.ceil(panel_re + viewWidth / 2);
+    const yMin = Math.floor(panel_im - viewHeight / 2);
+    const yMax = Math.ceil(panel_im + viewHeight / 2);
 
     // get panels from the cache of create new ones
     const visiblePanels = [];
@@ -99,8 +99,8 @@ class Panels {
 
         // create panel if it is not already in the cache
         if (!panel) {
-          const panelToImaginary = Panel.length / zoom;
-          const panelCenter = complex((panelX + 0.5) * panelToImaginary, (panelY + 0.5) * panelToImaginary);
+          const panelCenter_re = (panelX + 0.5) * Panel.length / zoom;
+          const panelCenter_im = (panelY + 0.5) * Panel.length / zoom;
 
           // canvas coordinates of bottom left
           // on the canvas Y-axis increasing is downwards (multiple panelY by -1)
@@ -108,9 +108,8 @@ class Panels {
           const canvasX = panelX * Panel.length;
           const canvasY = -1 * (panelY + 1) * Panel.length;
 
-          panel = new Panel(key, panelCenter, zoom, canvasX, canvasY);
+          panel = new Panel(key, panelCenter_re, panelCenter_im, zoom, canvasX, canvasY);
           panel.initiate();
-
           this.panels.set(key, panel);
         }
 
@@ -169,7 +168,7 @@ onmessage = function (e) {
     }
 
     case 'center': {
-      const { center, width, height } = e.data;
+      const { center_re, center_im, width, height } = e.data;
       const panels = currentPanels;
 
       if (!panels) {
@@ -177,8 +176,8 @@ onmessage = function (e) {
         break;
       }
 
-      console.debug('setting center in worker', center);
-      panels.setCenter(complex(center), width, height);
+      console.debug('setting center in worker', center_re, center_im);
+      panels.setCenter(center_re, center_im, width, height);
       break;
     }
 
