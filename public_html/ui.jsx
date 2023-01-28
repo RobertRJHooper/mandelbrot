@@ -6,7 +6,8 @@ class App extends React.Component {
     static defaultView = {
         center_re: 0,
         center_im: 0,
-        zoom: 200,
+        baseZoom: 200,
+        postZoom: 2,
     };
 
     constructor(props) {
@@ -44,7 +45,10 @@ class App extends React.Component {
         this.onPointHover = this.onPointHover.bind(this);
         this.onPan = this.onPan.bind(this);
         this.onPanRelease = this.onPanRelease.bind(this);
-        this.pushURLDebounced = _.debounce(() => this.pushURL(this.state.center_re, this.state.center_im, this.state.zoom), 1000);
+        this.pushURLDebounced = _.debounce(
+            () => this.pushURL(this.state.center_re, this.state.center_im, this.state.baseZoom * this.state.postZoom),
+            1000
+        );
     }
 
     /* get viewbox as specified in the URL, or return null */
@@ -55,7 +59,7 @@ class App extends React.Component {
         const x = Number(searchParams.get('x'));
         const y = Number(searchParams.get('y'));
         const zoom = Number(searchParams.get('zoom'));
-        const valid = isNum(x) && isNum(y) && isNum(zoom);
+        const valid = isNum(x) && isNum(y) && isNum(zoom) && (zoom > 0);
 
         // bad or missing numbers
         if (!valid) return {};
@@ -63,7 +67,8 @@ class App extends React.Component {
         return {
             center_re: x,
             center_im: y,
-            zoom: zoom,
+            baseZoom: zoom,
+            postZoom: 1,
         };
     }
 
@@ -110,7 +115,8 @@ class App extends React.Component {
                 <MandelbrotSet
                     center_re={this.state.center_re}
                     center_im={this.state.center_im}
-                    zoom={this.state.zoom}
+                    baseZoom={this.state.baseZoom}
+                    postZoom={this.state.postZoom}
                     width={this.state.width}
                     height={this.state.height}
                 />
@@ -119,7 +125,7 @@ class App extends React.Component {
                     <SampleDisplay
                         center_re={this.state.center_re}
                         center_im={this.state.center_im}
-                        zoom={this.state.zoom}
+                        zoom={this.state.baseZoom * this.state.postZoom}
                         width={this.state.width}
                         height={this.state.height}
                         sample={this.state.sample}
@@ -132,6 +138,8 @@ class App extends React.Component {
                     onBoxSelect={this.onBoxSelect}
                     onPan={this.onPan}
                     onPanRelease={this.onPanRelease}
+                    onZoomIn={}
+                    onZoomOut={}
                 />
 
                 <Navbar
@@ -157,7 +165,7 @@ class App extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        if (prevState.center != this.state.center || prevState.zoom != this.state.zoom) {
+        if (prevState.center != this.state.center || prevState.baseZoom != this.state.baseZoom) {
             this.pushURLDebounced();
         }
     }
@@ -168,15 +176,15 @@ class App extends React.Component {
 
     onPointHover(x, y) {
         this.setState((state, props) => {
-            const { center_re, center_im, zoom, width, height } = state;
-            const [re, im] = rectToImaginary(center_re, center_im, zoom, width, height, x, y);
+            const { center_re, center_im, baseZoom, postZoom, width, height } = state;
+            const [re, im] = rectToImaginary(center_re, center_im, baseZoom * postZoom, width, height, x, y);
             return { sample: mbSample(re, im) };
         });
     }
 
     onPan(dx, dy) {
         this.setState((state, props) => {
-            const { center_re, center_im, zoom, width, height, pan_re, pan_im } = state;
+            const { center_re, center_im, baseZoom, postZoom, width, height, pan_re, pan_im } = state;
 
             // if pan_re not set yet then set it to the current center point
             const p_re = isNum(pan_re) ? pan_re : center_re;
@@ -185,7 +193,7 @@ class App extends React.Component {
             const [re, im] = rectToImaginary(
                 p_re,
                 p_im,
-                zoom,
+                baseZoom * postZoom,
                 width,
                 height,
                 state.width / 2 - dx,
@@ -207,13 +215,13 @@ class App extends React.Component {
 
     onBoxSelect(box) {
         this.setState((state, props) => {
-            const { center_re, center_im, zoom, width, height } = state;
+            const { center_re, center_im, baseZoom, postZoom, width, height } = state;
 
             // new center
             const [re, im] = rectToImaginary(
                 center_re,
                 center_im,
-                zoom,
+                baseZoom * postZoom,
                 width,
                 height,
                 box.left + box.width / 2,
@@ -223,14 +231,15 @@ class App extends React.Component {
             // zoom so the box is fully shown as big as possible
             const fitWidth = box.width / width > box.height / height;
             const factor = fitWidth ? width / box.width : state.height / box.height;
-            const newZoom = zoom * factor;
+            const newZoom = baseZoom * postZoom * factor;
 
             console.log("sub box selected with center", center_re, center_im, "magnifying x", factor, 'to zoom level', newZoom);
 
             return {
                 center_re: re,
                 center_im: im,
-                zoom: newZoom,
+                baseZoom: newZoom,
+                postZoom: 1,
                 mouseMode: 'pan',
             }
         });
@@ -247,7 +256,10 @@ class MandelbrotSet extends React.Component {
         center_im: 0,
 
         // pixels per unit length of imaginary plane
-        zoom: 100,
+        baseZoom: 100,
+
+        // post calculation magnification
+        postZoom: 1,
 
         // canvas dimensions in pixels
         width: 400,
@@ -283,7 +295,7 @@ class MandelbrotSet extends React.Component {
             const canvas = this.canvas.current;
 
             if (canvas) {
-                const { width, height } = this.props;
+                const { width, height, postZoom } = this.props;
                 const { canvasOffsetX, canvasOffsetY } = this.model;
                 const context = canvas.getContext('2d', { alpha: false });
 
@@ -293,20 +305,18 @@ class MandelbrotSet extends React.Component {
                 // paint each snap
                 for (const snap of this.model.flush()) {
                     const { bitmap, canvasX, canvasY, length } = snap;
-                    const x = canvasOffsetX + canvasX;
-                    const y = canvasOffsetY + canvasY;
+                    const x = canvasOffsetX + canvasX * postZoom;
+                    const y = canvasOffsetY + canvasY * postZoom;
+                    const l = length * postZoom;
 
                     // check the snap is on canvas
-                    const visible = x + length >= 0
-                        && x < width
-                        && y + length >= 0
-                        && y < height;
+                    const visible = (x + l >= 0) && (x < width) && (y + l >= 0) && (y < height);
 
                     if (visible) {
                         if (bitmap) {
-                            context.drawImage(bitmap, x, y);
+                            context.drawImage(bitmap, x, y, l, l);
                         } else {
-                            context.fillRect(x, y, length, length);
+                            context.fillRect(x, y, l, l);
                         }
                     }
                 }
@@ -325,17 +335,17 @@ class MandelbrotSet extends React.Component {
         this.running = true;
         window.requestAnimationFrame(this.animationFrame);
 
-        const { zoom, center_re, center_im, width, height } = this.props;
-        this.model.setZoom(zoom);
-        this.model.setCenter(center_re, center_im, width, height);
+        const { baseZoom, center_re, center_im, width, height, postZoom } = this.props;
+        this.model.setBaseZoom(baseZoom);
+        this.model.setCenter(center_re, center_im, width, height, postZoom);
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { zoom, center_re, center_im, width, height } = this.props;
+        const { baseZoom, postZoom, center_re, center_im, width, height } = this.props;
 
-        if (zoom != prevProps.zoom) {
-            console.debug('update to zoom level', zoom);
-            this.model.setZoom(zoom);
+        if (baseZoom != prevProps.baseZoom) {
+            console.debug('update to zoom level', baseZoom);
+            this.model.setBaseZoom(baseZoom);
         }
 
         const update = center_re != prevProps.center_re
@@ -344,8 +354,8 @@ class MandelbrotSet extends React.Component {
             || height != prevProps.height;
 
         if (update) {
-            console.debug('update to center, width or height', center_re, center_im, width, height);
-            this.model.setCenter(center_re, center_im, width, height);
+            console.debug('update to center, width or height', center_re, center_im, width, height, postZoom);
+            this.model.setCenter(center_re, center_im, width, height, postZoom);
         }
     }
 

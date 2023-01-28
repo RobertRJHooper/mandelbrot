@@ -25,7 +25,7 @@ class ModelClient {
         this.workers = null;
 
         // current working state
-        this.zoom = null;
+        this.baseZoom = null;
 
         // pixel offset to shift from the origin to the center point
         // updated when setting center point
@@ -56,7 +56,7 @@ class ModelClient {
     }
 
     /* set the center and zoom level in the workers */
-    setZoom(zoom) {
+    setBaseZoom(zoom) {
         if (!this.workers || !this.workers.length) {
             console.error("no workers set up");
             return;
@@ -67,7 +67,8 @@ class ModelClient {
         this.updates = new Map();
 
         // save state locally
-        this.zoom = zoom;
+        this.baseZoom = zoom;
+        this.postZoom = 1;
         this.canvasOffsetX = null;
         this.canvasOffsetY = null;
 
@@ -83,7 +84,7 @@ class ModelClient {
     }
 
     /* set the center in the workers */
-    setCenter(center_re, center_im, width, height) {
+    setCenter(center_re, center_im, width, height, postZoom) {
         if (!width || !height) {
             console.debug("trivial view, nothing to do");
             return;
@@ -98,8 +99,9 @@ class ModelClient {
         this.updates = new Map(this.snaps);
 
         // save working state
-        this.canvasOffsetX = Math.round(width / 2 - center_re * this.zoom);
-        this.canvasOffsetY = Math.round(height / 2 + center_im * this.zoom);
+        this.postZoom = postZoom;
+        this.canvasOffsetX = Math.round(width / 2 - center_re * this.baseZoom * postZoom);
+        this.canvasOffsetY = Math.round(height / 2 + center_im * this.baseZoom * postZoom);
 
         // send center to workers
         this.workers.forEach(worker => {
@@ -128,7 +130,7 @@ class ModelClient {
 
     workerMessage(message) {
         console.debug('frame received with', message.data.snaps.length, 'snaps.', 'adding to', this.updates.size, 'existing updates, and total cached snaps', this.snaps.size);
-        const expired = message.data.zoom != this.zoom;        
+        const expired = message.data.zoom != this.baseZoom;        
 
         if (!expired) {
             for (const snap of message.data.snaps) {

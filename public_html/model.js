@@ -21,7 +21,7 @@ function mbInPrimary(re, im) {
   const a_im = -4 * im;
   const a_r = Math.sqrt(a_re * a_re + a_im * a_im);
 
-  // b = sqrt(a) = sqrt(1 - 4c)
+  // b = sqrt(a) = sqrt(1 - 4z)
   const b_re = Math.sqrt((a_r + a_re) / 2);
   const b_im = Math.sqrt((a_r - a_re) / 2) * Math.sign(a_im);
 
