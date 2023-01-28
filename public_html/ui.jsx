@@ -123,7 +123,7 @@ class App extends React.Component {
                 <Navbar
                     onReset={() => this.setState({ ...App.defaultView, infoModalVisible: false })}
                     mouseMode={this.state.mouseMode}
-                    onMouseModeToggle={() => this.setState((state) => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
+                    onSelectBox={() => this.setState((state) => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
                     sampleVisible={this.state.sampleVisible}
                     onSampleToggle={() => this.setState((state) => ({ sampleVisible: !state.sampleVisible }))}
                     onInfoToggle={() => this.setState((state) => ({ infoModalVisible: !state.infoModalVisible }))}
@@ -203,9 +203,11 @@ class App extends React.Component {
             const newZoom = zoom * factor;
 
             console.log("sub box selected with center", newCenter, "magnifying x", factor, 'to zoom level', newZoom);
+
             return {
                 center: newCenter,
                 zoom: newZoom,
+                mouseMode: 'pan',
             }
         });
     }
@@ -231,7 +233,7 @@ class MandelbrotSet extends React.Component {
     constructor(props) {
         super(props);
         this.model = new ModelClient();
-        
+
         // drawing canvas and loop
         this.canvas = React.createRef();
         this.running = false;
@@ -259,29 +261,29 @@ class MandelbrotSet extends React.Component {
     }
 
     animationFrame(timestamp) {
-        if(!this.lastFrameTime || this.lastFrameTime + MandelbrotSet.framePeriod >= timestamp) {
+        if (!this.lastFrameTime || this.lastFrameTime + MandelbrotSet.framePeriod >= timestamp) {
             const { width, height } = this.props;
             const { canvasOffsetX, canvasOffsetY } = this.model;
             const canvas = this.canvas.current;
-    
+
             if (canvas) {
-                const context = canvas.getContext('2d', {alpha: false});
-    
+                const context = canvas.getContext('2d', { alpha: false });
+
                 for (const snap of this.model.flush()) {
                     const { bitmap, canvasX, canvasY } = snap;
-    
+
                     const x = canvasOffsetX + canvasX;
                     const y = canvasOffsetY + canvasY;
-    
+
                     // check the snap is on canvas
                     const visible = x + bitmap.width >= 0
                         && x < width
                         && y + bitmap.height >= 0
                         && y < height;
-    
+
                     if (visible) context.drawImage(bitmap, x, y);
                 }
-            }    
+            }
         }
 
         // loop
@@ -482,12 +484,12 @@ class Selector extends React.Component {
     getCursorClass() {
         if (false) {
             return "zooming-in";
-        } else if(false) {
+        } else if (false) {
             return "zooming-out";
         } else if (this.props.mouseMode == "box-select") {
             return "boxselecting";
         } else if (this.props.mouseMode == "pan") {
-            if(isNum(this.state.selectedPointX) && isNum(this.state.selectedPointY)) {
+            if (isNum(this.state.selectedPointX) && isNum(this.state.selectedPointY)) {
                 return "grabbing";
             } else {
                 return "grabbable";
@@ -520,11 +522,11 @@ class Selector extends React.Component {
                 {box}
             </div>
         );
-    }    
+    }
 
     removeListeners() {
         window.removeEventListener("mouseup", this.onMouseUp);
-        
+
         // client area listeners
         const div = this.divListening;
         if (div) {
@@ -540,13 +542,13 @@ class Selector extends React.Component {
 
     setListeners() {
         this.removeListeners();
-        
+
         // global listeners
         window.addEventListener("mouseup", this.onMouseUp);
-        
+
         // client area listeners
         const div = this.div.current;
-    
+
         if (div) {
             div.addEventListener("mousemove", this.onMouseMove);
             div.addEventListener("mousedown", this.onMouseDown);
@@ -695,7 +697,7 @@ class Navbar extends React.Component {
         sampleVisible: false,
 
         onReset: null,
-        onMouseModeToggle: null,
+        onSelectBox: null,
         onSampleToggle: null,
         onInfoToggle: null,
     }
@@ -705,9 +707,12 @@ class Navbar extends React.Component {
     }
 
     render() {
+        const navItemClass = 'navbar-item';
+        const navItemActiveClass = 'navbar-item navbar-item-active';
+
         return (
             <div className="navbar">
-                <div className="navbar-item" onClick={this.props.onReset}>
+                <div className={navItemClass} onClick={this.props.onReset}>
                     {/* house icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.707 1.5Z" />
@@ -715,28 +720,21 @@ class Navbar extends React.Component {
                     </svg>
                 </div>
 
-                <div className="navbar-item" onClick={this.props.onMouseModeToggle} >
-                    {this.props.mouseMode == 'pan' ?
-                        /* selection square icon to activate box selection */
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
-                            <path d="M2 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM0 2a2 2 0 0 1 3.937-.5h8.126A2 2 0 1 1 14.5 3.937v8.126a2 2 0 1 1-2.437 2.437H3.937A2 2 0 1 1 1.5 12.063V3.937A2 2 0 0 1 0 2zm2.5 1.937v8.126c.703.18 1.256.734 1.437 1.437h8.126a2.004 2.004 0 0 1 1.437-1.437V3.937A2.004 2.004 0 0 1 12.063 2.5H3.937A2.004 2.004 0 0 1 2.5 3.937zM14 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM2 13a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm12 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />
-                        </svg>
-                        :
-                        /* selection hand icon to activate panning */
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
-                            <path d="M8.5 1.75v2.716l.047-.002c.312-.012.742-.016 1.051.046.28.056.543.18.738.288.273.152.456.385.56.642l.132-.012c.312-.024.794-.038 1.158.108.37.148.689.487.88.716.075.09.141.175.195.248h.582a2 2 0 0 1 1.99 2.199l-.272 2.715a3.5 3.5 0 0 1-.444 1.389l-1.395 2.441A1.5 1.5 0 0 1 12.42 16H6.118a1.5 1.5 0 0 1-1.342-.83l-1.215-2.43L1.07 8.589a1.517 1.517 0 0 1 2.373-1.852L5 8.293V1.75a1.75 1.75 0 0 1 3.5 0z" />
-                        </svg>
-                    }
+                <div className={this.props.mouseMode == 'box-select' ? navItemActiveClass : navItemClass} onClick={this.props.onSelectBox} >
+                    {/* selection square icon to activate box selection */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
+                        <path d="M2 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM0 2a2 2 0 0 1 3.937-.5h8.126A2 2 0 1 1 14.5 3.937v8.126a2 2 0 1 1-2.437 2.437H3.937A2 2 0 1 1 1.5 12.063V3.937A2 2 0 0 1 0 2zm2.5 1.937v8.126c.703.18 1.256.734 1.437 1.437h8.126a2.004 2.004 0 0 1 1.437-1.437V3.937A2.004 2.004 0 0 1 12.063 2.5H3.937A2.004 2.004 0 0 1 2.5 3.937zM14 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM2 13a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm12 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />
+                    </svg>
                 </div>
 
-                <div className={this.props.sampleVisible ? "navbar-item navbar-item-active" : "navbar-item"} onClick={this.props.onSampleToggle}>
+                <div className={this.props.sampleVisible ? navItemActiveClass : navItemClass} onClick={this.props.onSampleToggle}>
                     {/* cursor icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
                     </svg>
                 </div>
 
-                <div className="navbar-item" onClick={this.props.onInfoToggle}>
+                <div className={navItemClass} onClick={this.props.onInfoToggle}>
                     {/* info icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="m9.708 6.075-3.024.379-.108.502.595.108c.387.093.464.232.38.619l-.975 4.577c-.255 1.183.14 1.74 1.067 1.74.72 0 1.554-.332 1.933-.789l.116-.549c-.263.232-.65.325-.905.325-.363 0-.494-.255-.402-.704l1.323-6.208Zm.091-2.755a1.32 1.32 0 1 1-2.64 0 1.32 1.32 0 0 1 2.64 0Z" />
