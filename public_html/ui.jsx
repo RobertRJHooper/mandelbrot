@@ -216,7 +216,7 @@ class App extends React.Component {
 }
 
 class MandelbrotSet extends React.Component {
-    static framePeriod = 1000 / 4;
+    static framePeriod = 1000 / 20;
     static iterationsLimit = 4000;
 
     static defaultProps = {
@@ -255,40 +255,52 @@ class MandelbrotSet extends React.Component {
     clearCanvas() {
         const canvas = this.canvas.current;
         const context = canvas.getContext('2d');
+        return;
         context.beginPath();
         context.fillStyle = "black";
         context.fillRect(0, 0, canvas.width, canvas.height);
     }
 
     animationFrame(timestamp) {
-        if (!this.lastFrameTime || this.lastFrameTime + MandelbrotSet.framePeriod >= timestamp) {
-            const { width, height } = this.props;
-            const { canvasOffsetX, canvasOffsetY } = this.model;
+        const throttlePassed = !this.lastFrameTime || (this.lastFrameTime + MandelbrotSet.framePeriod < timestamp);
+
+        if (throttlePassed) {
             const canvas = this.canvas.current;
 
             if (canvas) {
+                const { width, height } = this.props;
+                const { canvasOffsetX, canvasOffsetY } = this.model;
                 const context = canvas.getContext('2d', { alpha: false });
 
-                for (const snap of this.model.flush()) {
-                    const { bitmap, canvasX, canvasY } = snap;
+                // blank bitmap fill
+                context.fillStyle = "black";
 
+                // paint each snap
+                for (const snap of this.model.flush()) {
+                    const { bitmap, canvasX, canvasY, length } = snap;
                     const x = canvasOffsetX + canvasX;
                     const y = canvasOffsetY + canvasY;
 
                     // check the snap is on canvas
-                    const visible = x + bitmap.width >= 0
+                    const visible = x + length >= 0
                         && x < width
-                        && y + bitmap.height >= 0
+                        && y + length >= 0
                         && y < height;
 
-                    if (visible) context.drawImage(bitmap, x, y);
+                    if (visible) {
+                        if (bitmap) {
+                            context.drawImage(bitmap, x, y);
+                        } else {
+                            context.fillRect(x, y, length, length);
+                        }
+                    }
                 }
+                this.lastFrameTime = timestamp;
             }
         }
 
         // loop
         if (this.running) {
-            this.lastFrameTime = timestamp;
             window.requestAnimationFrame(this.animationFrame);
         }
     }

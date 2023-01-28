@@ -12,17 +12,29 @@ const frameThrottlePeriod = 250;
 
 // grid class representing a square of the set
 class Panel extends MandelbrotGrid {
-  static width = 32;
+  static length = 32;
 
   constructor(center, zoom) {
-    super(center, zoom, Panel.width, Panel.width);
+    super(center, zoom, Panel.length, Panel.length);
     this.iteration = 0;
-    this.dirty = false;
+    this.dirty = true;
   }
 
-  async getBitmap() {
+  // create a snapshot and clear dirty flag
+  async snap() {
     this.dirty = false;
-    return await createImageBitmap(this.image);
+
+    // get the bitmap or blank shortcut
+    const blank = this.live.length == this.points.length;
+    const bitmap = blank ? null : await createImageBitmap(this.image);
+
+    return {
+      key: this.key,
+      canvasX: this.canvasX,
+      canvasY: this.canvasY,
+      length: Panel.length,
+      bitmap: bitmap,
+    };
   }
 
   iterate() {
@@ -64,9 +76,9 @@ class Panels {
     this.center = center;
 
     // total view box in units of panels about origin
-    const pCenter = divide(multiply(center, zoom), Panel.width);
-    const pWidth = width / Panel.width;
-    const pHeight = height / Panel.width;
+    const pCenter = divide(multiply(center, zoom), Panel.length);
+    const pWidth = width / Panel.length;
+    const pHeight = height / Panel.length;
 
     // viewbox in panels
     const xMin = floor(pCenter.re - pWidth / 2);
@@ -87,8 +99,8 @@ class Panels {
         // create panel if it is not already in the cache
         if (typeof panel == "undefined") {
           const panelCenter = complex(
-            (panelX + 0.5) / zoom * Panel.width,
-            (panelY + 0.5) / zoom * Panel.width,
+            (panelX + 0.5) / zoom * Panel.length,
+            (panelY + 0.5) / zoom * Panel.length,
           );
 
           panel = new Panel(panelCenter, zoom);
@@ -98,8 +110,8 @@ class Panels {
           // canvas coordinates of bottom left
           // on the canvas Y-axis increasing is downwards (multiple panelY by -1)
           // and the box is painted downwards (add 1 to panelY)
-          panel.canvasX = panelX * Panel.width;
-          panel.canvasY = -1 * (panelY + 1) * Panel.width;
+          panel.canvasX = panelX * Panel.length;
+          panel.canvasY = -1 * (panelY + 1) * Panel.length;
           this.panels.set(key, panel);
         }
 
@@ -133,35 +145,20 @@ class Panels {
 
     // no dirty panels to send
     if (!dirtyPanels.length) {
-      return null;
+      return false;
     }
-
-    // diagnostics
-    console.debug('posting frame of dirty panels', dirtyPanels.length, 'of', this.visiblePanels.length);
-
-    // generate all bitmaps asyncronously
-    const bitmaps = await Promise.all(dirtyPanels.map(p => p.getBitmap()));
-
-    // put together panels with meta info
-    let snaps = [];
-
-    for (let [panel, bitmap] of _.zip(dirtyPanels, bitmaps)) {
-      snaps.push({
-        key: panel.key,
-        canvasX: panel.canvasX,
-        canvasY: panel.canvasY,
-        bitmap: bitmap,
-      });
-    }
-
+    
+    const snaps = await Promise.all(dirtyPanels.map(p => p.snap()));
+    
     // counters
+    console.debug('posting frame of dirty panels', dirtyPanels.length, 'of', this.visiblePanels.length);
     this.frameTime = timestamp;
 
     // send to master
     postMessage({
       zoom: this.zoom,
       snaps: snaps,
-    }, snaps.map(s => s.bitmap));
+    }, snaps.map(s => s.bitmap).filter(s => s));
 
     // return signally something was sent
     return true;
@@ -174,7 +171,6 @@ class Panels {
         return true;
       }
     }
-
     return false;
   }
 }
