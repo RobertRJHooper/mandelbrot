@@ -6,6 +6,8 @@ importScripts(
   'model.js'
 );
 
+// import math functions into global namespace
+var { complex, conj, add, subtract, multiply, divide, ceil, floor, sqrt } = math;
 
 // minmum period between image posts
 const frameThrottlePeriod = 250;
@@ -15,7 +17,7 @@ class Panel extends MandelbrotGrid {
   static length = 32;
 
   constructor(key, center, zoom, canvasX, canvasY) {
-    super(center, zoom, Panel.length, Panel.length);
+    super(center.re, center.im, zoom, Panel.length, Panel.length);
     this.key = key;
     this.canvasX = canvasX;
     this.canvasY = canvasY;
@@ -218,7 +220,9 @@ async function loop() {
   }
 
   // iterate points in each panel
+  console.time('iterate');
   panels.iterate();
+  console.timeEnd('iterate');
   return true;
 }
 

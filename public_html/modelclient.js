@@ -21,7 +21,7 @@ function imaginarytoRect(center, zoom, width, height, point) {
 
 /* class to handle model calculations and communication with worker */
 class ModelClient {
-    static maxWorkerCount = 8;
+    static maxWorkerCount = 1;
     static timeToIdle = 5000; // ms to run before idleing workers
 
     constructor() {

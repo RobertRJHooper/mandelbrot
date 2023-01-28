@@ -1,11 +1,7 @@
 "use strict";
 
-// import math functions into global namespace
-var { complex, conj, add, subtract, multiply, divide, ceil, floor, sqrt } = math;
-
 // is the point in the main cardiod where zn converges?
-function mbInPrimary(c) {
-  const { re, im } = c;
+function mbInPrimary(re, im) {
 
   // short cut negative
   if (re > 0.38 || re < -0.76 || im > 0.66 || im < -0.66) {
@@ -17,49 +13,52 @@ function mbInPrimary(c) {
     return true;
   }
 
-  // full calculation
-  const z = sqrt(complex(-4 * c.re + 1, -4 * c.im));
+  // full calculation (principle square root)
+  // |sqrt(1 - 4c) - 1| < 1 with c = re + i * im
+  const z = math.sqrt(math.complex(-4 * re + 1, -4 * im));
   z.re = z.re - 1;
   return z.re * z.re + z.im * z.im < 0.9999;
 }
 
 // is the point in the secondary circle when zn has period two in limit?
-function mbInSecondary(c) {
-  const re = c.re + 1;
-  const im = c.im;
-  return re * re + im * im < 1 / 16;
+function mbInSecondary(re, im) {
+  if (re < -1.25 || re > -0.75 || im < -0.25 || im > -0.25) return false;
+  return (re + 1) * (re + 1) + im * im < 1 / 16;
 }
 
-function mbEscaped(z) {
-  const { re, im } = z;
+function mbEscaped(re, im) {
+  if (re < -2 || re > 2 || im < -2 || im > 2) return true;
   return re * re + im * im > 4;
 }
 
-function mbIterate(z, c) {
-  const { re, im } = z;
-  z.re = re * re - im * im + c.re;
-  z.im = 2 * re * im + c.im;
-}
 
 class Point {
-  constructor(c) {
-    this.c = c;
-    this.z = complex(0);
+  constructor(c_re, c_im) {
+    this.c_re = c_re;
+    this.c_im = c_im;
+
+    this.z_re = 0;
+    this.z_im = 0;
     this.age = 0;
     this.escapeAge = null;
 
     // we can know by formula that some values series remain bounded
-    this.boundedByFormula = mbInPrimary(c) || mbInSecondary(c);
+    this.boundedByFormula = mbInPrimary(c_re, c_im) || mbInSecondary(c_re, c_im);
 
     // flag whether the point is determined yet
     this.undetermined = !this.boundedByFormula;
   }
 
   iterate() {
-    mbIterate(this.z, this.c);
+    const { z_re, z_im, c_re, c_im } = this;
+    const re = z_re * z_re - z_im * z_im + c_re;
+    const im = 2 * z_re * z_im + c_im;
+
+    this.z_re = re;
+    this.z_im = im;
     this.age += 1;
 
-    if (this.undetermined && mbEscaped(this.z)) {
+    if (this.undetermined && mbEscaped(re, im)) {
       this.escapeAge = this.age;
       this.undetermined = false;
     }
@@ -67,15 +66,16 @@ class Point {
 }
 
 // give the complex numbers of a particular point to escape
-function mbSample(c, iterations = 100) {
-  const point = new Point(c);
+// not optimised for speed
+function mbSample(c_re, c_im, iterations = 100) {
+  const point = new Point(c_re, c_im);
 
   // runout of points
   const zi = [];
 
   // run to escape of max iterations
   while (point.age < iterations) {
-    zi.push(complex(point.z));
+    zi.push([point.z_re, point.z_im]);
     point.iterate();
 
     if (point.escapeAge && point.escapeAge + 1 < point.age) {
@@ -83,7 +83,7 @@ function mbSample(c, iterations = 100) {
     }
   }
 
-  // append info to point
+  // append runout info to point and return
   point.zi = zi;
   return point;
 }
@@ -134,8 +134,9 @@ const ageToRGB = _.range(ageToRGBCycleLength).map(i =>
 
 // Object that holds a regular rectangular grid of Point objects
 class MandelbrotGrid {
-  constructor(center, zoom, width, height) {
-    this.center = center;
+  constructor(center_re, center_im, zoom, width, height) {
+    this.center_re = center_re;
+    this.center_im = center_im;
     this.zoom = zoom;
     this.width = width;
     this.height = height;
@@ -161,19 +162,20 @@ class MandelbrotGrid {
   }
 
   initiatePoints() {
-    const { center, zoom, width, height } = this;
+    const { center_re, center_im, zoom, width, height } = this;
     const points = [];
 
     // this could be vectorised for speed
     for (let j = 0; j < height; j++) {
       for (let i = 0; i < width; i++) {
-          const dx = (i - (width - 1) / 2) / zoom;
-          const dy = (j - (height - 1) / 2) / zoom;
-          const c = complex(center.re + dx, center.im - dy);
-    
-          const point = new Point(c);
-          point.idx = j * width + i;        
-          points.push(point);
+        const dx = (i - (width - 1) / 2) / zoom;
+        const dy = (j - (height - 1) / 2) / zoom;
+        const c_re = center_re + dx;
+        const c_im = center_im - dy;
+
+        const point = new Point(c_re, c_im);
+        point.idx = j * width + i;
+        points.push(point);
       }
     }
 
@@ -183,9 +185,7 @@ class MandelbrotGrid {
 
   initiate() {
     this.initiateImage();
-    console.time('init');
     this.initiatePoints();
-    console.timeEnd('init');
   }
 
   // iterals all live points and returns true iff the image changed
