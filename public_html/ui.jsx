@@ -13,6 +13,7 @@ class App extends React.Component {
 
         this.state = {
             ...App.defaultView,
+            ...this.pullURL(),
             width: 0,
             height: 0,
 
@@ -25,7 +26,6 @@ class App extends React.Component {
 
         // keep track of container dimensions
         this.container = React.createRef();
-
         this.resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 if (entry.target == this.container.current) {
@@ -46,13 +46,18 @@ class App extends React.Component {
         const url = new URL(window.location);
         const searchParams = url.searchParams;
 
+        const x = Number(searchParams.get('x'));
+        const y = Number(searchParams.get('y'));
+        const z = Number(searchParams.get('z'));
+        const valid = isNum(x) && isNum(y) && isNum(z);
+
+        // bad or missing numbers
+        if (!valid) return {};
+
         return {
-            center: complex(
-                Number(searchParams.get('x')),
-                Number(searchParams.get('y'))
-            ),
-            zoom: Number(searchParams.get('z')),
-        }
+            center: complex(x, y),
+            zoom: z,
+        };
     }
 
     /* push view to the URL if it's not already there */
