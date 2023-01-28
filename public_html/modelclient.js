@@ -22,6 +22,7 @@ function imaginarytoRect(center, zoom, width, height, point) {
 /* class to handle model calculations and communication with worker */
 class ModelClient {
     static maxWorkerCount = 8;
+    static timeToIdle = 5000; // ms to run before idleing workers
 
     constructor() {
         this.workers = null;
@@ -37,13 +38,6 @@ class ModelClient {
         // snaps of panels and updated snaps since last flush
         this.snaps = new Map();
         this.updates = new Map();
-
-        // throttling defaults
-        this.frameBudget = 2;
-        this.iterationsLimit = 4000;
-
-        // callback reference
-        this.onUpdate = null;
     }
 
     initiate() {
@@ -120,11 +114,16 @@ class ModelClient {
             });
         });
 
-        // set budget in workers
+        // lift idle limit
+        this.setIdleTime();
+    }
+
+    // set the time that workers will idle
+    setIdleTime() {
         for (const worker of this.workers) {
             worker.postMessage({
                 command: 'limit',
-                iterationsLimit: this.iterationsLimit,
+                timeToIdle: Date.now() + ModelClient.timeToIdle,
             });
         }
     }
@@ -147,6 +146,7 @@ class ModelClient {
     flush() {
         const updates = this.updates;
         this.updates = new Map();
+        this.setIdleTime();
         return updates.values();
     }
 }

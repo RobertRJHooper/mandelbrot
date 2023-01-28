@@ -88,18 +88,6 @@ function mbSample(c, iterations = 100) {
   return point;
 }
 
-// helper to get the complex value of an (x, y) point in the grid
-function gridToValue(center, zoom, width, height, i, j) {
-  const dx = (i - (width - 1) / 2) / zoom;
-  const dy = (j - (height - 1) / 2) / zoom;
-  return complex(center.re + dx, center.im - dy);
-}
-
-// helper to get the (x, y) point in the grid from a complex point
-function valueToGrid(width, height, view, z) {
-  throw Error('not implemented');
-}
-
 /**
 * Converts an HSL color value to RGB. Conversion formula
 * adapted from http://en.wikipedia.org/wiki/HSL_color_space.
@@ -137,11 +125,14 @@ function hslToRgb(h, s, l) {
   return [r * 255, g * 255, b * 255];
 }
 
-function ageToRGB(age) {
-  const hue = math.mod(age / 30 + 0.61, 1);
-  return hslToRgb(hue, 0.9, 0.5);
-}
+// lookup table of age to RGB colour
+const ageToRGBCycleLength = 30;
 
+const ageToRGB = _.range(ageToRGBCycleLength).map(i =>
+  hslToRgb((i / ageToRGBCycleLength + 0.61) % 1, 0.9, 0.5)
+);
+
+// Object that holds a regular rectangular grid of Point objects
 class MandelbrotGrid {
   constructor(center, zoom, width, height) {
     this.center = center;
@@ -170,16 +161,19 @@ class MandelbrotGrid {
   }
 
   initiatePoints() {
-    const { center, zoom, width, height} = this;
+    const { center, zoom, width, height } = this;
     const points = [];
 
     // this could be vectorised for speed
     for (let j = 0; j < height; j++) {
       for (let i = 0; i < width; i++) {
-        const idx = j * width + i;
-        const point = new Point(gridToValue(center, zoom, width, height, i, j));
-        point.idx = idx;
-        points.push(point);
+          const dx = (i - (width - 1) / 2) / zoom;
+          const dy = (j - (height - 1) / 2) / zoom;
+          const c = complex(center.re + dx, center.im - dy);
+    
+          const point = new Point(c);
+          point.idx = j * width + i;        
+          points.push(point);
       }
     }
 
@@ -189,7 +183,9 @@ class MandelbrotGrid {
 
   initiate() {
     this.initiateImage();
+    console.time('init');
     this.initiatePoints();
+    console.timeEnd('init');
   }
 
   // iterals all live points and returns true iff the image changed
@@ -203,7 +199,7 @@ class MandelbrotGrid {
       const i = point.idx * 4;
 
       if (point.escapeAge !== null) {
-        const rgb = ageToRGB(point.escapeAge);
+        const rgb = ageToRGB[point.escapeAge % ageToRGBCycleLength];
         imageData[i + 0] = rgb[0];
         imageData[i + 1] = rgb[1];
         imageData[i + 2] = rgb[2];
@@ -221,7 +217,7 @@ class MandelbrotGrid {
     // update live list
     this.live = live;
 
-    // return true if pixels were updated
+    // return true iff pixels were updated
     return determined.length;
   }
 }

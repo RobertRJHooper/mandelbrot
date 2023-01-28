@@ -216,8 +216,7 @@ class App extends React.Component {
 }
 
 class MandelbrotSet extends React.Component {
-    static framePeriod = 1000 / 20;
-    static iterationsLimit = 4000;
+    static framePeriod = 1000 / 10;
 
     static defaultProps = {
         center: complex(0),

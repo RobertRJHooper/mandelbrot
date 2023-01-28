@@ -14,9 +14,11 @@ const frameThrottlePeriod = 250;
 class Panel extends MandelbrotGrid {
   static length = 32;
 
-  constructor(center, zoom) {
+  constructor(key, center, zoom, canvasX, canvasY) {
     super(center, zoom, Panel.length, Panel.length);
-    this.iteration = 0;
+    this.key = key;
+    this.canvasX = canvasX;
+    this.canvasY = canvasY;
     this.dirty = true;
   }
 
@@ -38,10 +40,9 @@ class Panel extends MandelbrotGrid {
   }
 
   iterate() {
-    const ret = super.iterate();
-    this.iteration += 1;
-    this.dirty |= ret;
-    return this.dirty;
+    if(super.iterate()) {
+      this.dirty = true;
+    }
   }
 }
 
@@ -62,10 +63,8 @@ class Panels {
     this.visiblePanels = [];
 
     // limiters
-    this.pause = false;
-    this.iteration = 0;
-    this.iterationsLimit = 3000;
-    this.frameTime = null;
+    this.frameTime = 0;
+    this.timeToIdle = 0;
   }
 
   // set panels around the point that cover width and height
@@ -97,21 +96,19 @@ class Panels {
         let panel = this.panels.get(key);
 
         // create panel if it is not already in the cache
-        if (typeof panel == "undefined") {
-          const panelCenter = complex(
-            (panelX + 0.5) / zoom * Panel.length,
-            (panelY + 0.5) / zoom * Panel.length,
-          );
-
-          panel = new Panel(panelCenter, zoom);
-          panel.initiate();
-          panel.key = key;
+        if (!panel) {
+          const panelToImaginary = Panel.length / zoom;
+          const panelCenter = complex((panelX + 0.5) * panelToImaginary, (panelY + 0.5) * panelToImaginary);
 
           // canvas coordinates of bottom left
           // on the canvas Y-axis increasing is downwards (multiple panelY by -1)
           // and the box is painted downwards (add 1 to panelY)
-          panel.canvasX = panelX * Panel.length;
-          panel.canvasY = -1 * (panelY + 1) * Panel.length;
+          const canvasX = panelX * Panel.length;
+          const canvasY = -1 * (panelY + 1) * Panel.length;
+
+          panel = new Panel(key, panelCenter, zoom, canvasX, canvasY);
+          panel.initiate();
+
           this.panels.set(key, panel);
         }
 
@@ -119,42 +116,33 @@ class Panels {
       }
     }
 
-    // diagnostics
-    console.debug('visible panels selected', visiblePanels.length);
-
     // state
+    console.debug('visible panels selected', visiblePanels.length);
     this.visiblePanels = visiblePanels;
-    this.iteration = 0;
+
+    // reset frame time so first frame isn't time throttled
+    this.frameTime = 0;
   }
 
   // iterate all current panels
   iterate() {
-    for (let panel of this.panels.values()) {
-      if (panel.iteration <= this.iterationsLimit) {
-        if (panel.iterate()) {
-          this.dirty = true;
-        }
-      }
+    for (const panel of this.panels.values()) {
+      panel.iterate();
     }
-    this.iteration += 1;
   }
 
   // post updates for visible panels
-  async post(timestamp) {
+  async post() {
     const dirtyPanels = this.visiblePanels.filter(p => p.dirty);
 
     // no dirty panels to send
     if (!dirtyPanels.length) {
       return false;
     }
-    
-    const snaps = await Promise.all(dirtyPanels.map(p => p.snap()));
-    
-    // counters
-    console.debug('posting frame of dirty panels', dirtyPanels.length, 'of', this.visiblePanels.length);
-    this.frameTime = timestamp;
 
-    // send to master
+    const snaps = await Promise.all(dirtyPanels.map(p => p.snap()));
+    console.debug('posting frame of dirty panels', dirtyPanels.length, 'of', this.visiblePanels.length);
+
     postMessage({
       zoom: this.zoom,
       snaps: snaps,
@@ -162,16 +150,6 @@ class Panels {
 
     // return signally something was sent
     return true;
-  }
-
-  // check if frame issue throttling is applying now
-  isFrameThrottled(timestamp) {
-    if (this.frameTime) {
-      if (timestamp < this.frameTime + frameThrottlePeriod) {
-        return true;
-      }
-    }
-    return false;
   }
 }
 
@@ -191,13 +169,13 @@ onmessage = function (e) {
     case 'center': {
       const { center, width, height } = e.data;
       const panels = currentPanels;
-      console.debug('setting center in worker', center);
 
       if (!panels) {
-        console.error('zoom level not setup yet while setting center');
+        console.warn('zoom level not setup yet while setting center');
         break;
       }
 
+      console.debug('setting center in worker', center);
       panels.setCenter(complex(center), width, height);
       break;
     }
@@ -205,20 +183,13 @@ onmessage = function (e) {
     case 'limit': {
       const panels = currentPanels;
 
-      // nothing yet initiated
       if (!panels) {
-        console.warning('limit command ignored becaue there are no current panels')
+        console.warn('limit command ignored becaue there are no current panels')
         break;
       }
 
-      if (typeof e.data.iterationsLimit != "undefined") {
-        panels.iterationsLimit = e.data.iterationsLimit;
-      }
-
-      if (typeof e.data.pause != "undefined") {
-        panels.pause = e.data.pause;
-      }
-
+      // update time to run iterations to
+      panels.timeToIdle = e.data.timeToIdle;
       break;
     }
 
@@ -232,33 +203,28 @@ async function loop() {
   const panels = currentPanels;
 
   // nothing to do
-  if (!panels) {
-    return false;
-  }
+  if (!panels) return false;
 
-  // decide if was can send panels to master
+  // work throttle
   const timestamp = Date.now();
-  const throttled = panels.isFrameThrottled(timestamp);
+  if (panels.timeToIdle < timestamp) return false;
 
   // post a frame of panels to the master
-  if (!throttled) {
+  if (timestamp > panels.frameTime + frameThrottlePeriod) {
     if (await panels.post(timestamp)) {
+      panels.frameTime = timestamp;
       return true;
     }
   }
 
   // iterate points in each panel
-  if (!panels.pause && panels.iteration < panels.iterationsLimit) {
-    panels.iterate();
-    return true;
-  }
-
-  // nothing done
-  return false;
+  panels.iterate();
+  return true;
 }
 
 async function runLoop() {
-  const worked = await loop();
-  setTimeout(runLoop, worked ? 0 : 100);
+  const workDone = await loop();
+  const pause = workDone ? 0 : 250;
+  setTimeout(runLoop, pause);
 }
 runLoop();
