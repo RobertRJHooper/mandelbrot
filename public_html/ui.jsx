@@ -10,7 +10,7 @@ class App extends React.Component {
         // pinch zoom modifier to the magnification
         // This is reset and baked into center
         // at the end of the pinch
-        postZoom: 1,
+        postZoom: 2,
     };
 
     constructor(props) {
@@ -201,13 +201,13 @@ class App extends React.Component {
         });
     }
 
-    onZoomChange(middle, scale) {
+    onZoomChange(position, scale) {
         this.setState({ postZoom: scale });
     }
 
-    onZoomComplete(middle, scale) {
+    onZoomComplete() {
         this.setState((state, props) => ({
-            zoom: this.state.zoom * scale,
+            zoom: state.zoom * state.postZoom,
             postZoom: 1,
         }));
     }
@@ -343,7 +343,8 @@ class MandelbrotSet extends React.Component {
         const update = center.re != prevProps.center.re
             || center.im != prevProps.center.im
             || width != prevProps.width
-            || height != prevProps.height;
+            || height != prevProps.height
+            || postZoom != prevProps.postZoom;
 
         if (update) {
             console.debug('update to center, width or height', center.re, center.im, width, height, postZoom);
