@@ -22,7 +22,7 @@ function imaginarytoRect(center, zoom, width, height, point) {
 
 /* class to handle model calculations and communication with worker */
 class ModelClient {
-    static maxWorkerCount = 1;
+    static maxWorkerCount = 8;
 
     // ms to run before idling workers after the last flush call
     static timeToIdle = 3000;

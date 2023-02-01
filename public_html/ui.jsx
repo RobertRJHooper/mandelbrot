@@ -10,7 +10,7 @@ class App extends React.Component {
         // pinch zoom modifier to the magnification
         // This is reset and baked into center
         // at the end of the pinch
-        postZoom: 2,
+        postZoom: 1,
     };
 
     constructor(props) {
