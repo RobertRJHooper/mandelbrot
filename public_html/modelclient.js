@@ -41,6 +41,9 @@ class ModelClient {
         // snaps of panels and updated snaps since last flush
         this.snaps = new Map();
         this.updates = new Map();
+
+        // flag if the next flush is from blank or from cumulative 
+        this.updatesFromBlank = true;
     }
 
     initiate() {
@@ -71,6 +74,7 @@ class ModelClient {
         // clear snap caches
         this.snaps = new Map();
         this.updates = new Map();
+        this.updatesFromBlank = true;
 
         // save state locally
         this.zoom = zoom;
@@ -103,6 +107,7 @@ class ModelClient {
 
         // update to all present snaps
         this.updates = new Map(this.snaps);
+        this.updatesFromBlank = true;
 
         // save working state
         this.postZoom = postZoom;
@@ -149,9 +154,16 @@ class ModelClient {
 
     /* get updates since last flush */
     flush() {
-        const updates = this.updates;
+        const {updates, updatesFromBlank} = this;
+
+        // reset local updates holders
         this.updates = new Map();
+        this.updatesFromBlank = false;
+
+        // update throttle so more updates come
         this.setIdleTime();
-        return updates.values();
+
+        // all done
+        return {snaps: updates.values(), update: !updatesFromBlank};
     }
 }

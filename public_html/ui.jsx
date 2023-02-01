@@ -266,6 +266,7 @@ class MandelbrotSet extends React.Component {
         // drawing canvas and loop
         this.canvas = React.createRef();
         this.running = false;
+        this.clear = false; // flag to clear canvas before next update
         this.animationFrame = this.animationFrame.bind(this);
         this.lastFrameTime = null;
     }
@@ -281,13 +282,16 @@ class MandelbrotSet extends React.Component {
         );
     }
 
-    drawSnaps(snaps) {
+    drawSnaps(snaps, update) {
         const { width, height, postZoom } = this.props;
         const { canvasOffsetX, canvasOffsetY } = this.model;
         const context = this.canvas.current.getContext('2d', { alpha: false });
 
-        // blank bitmap fill shortcut on null bitmap
+        // clear canvas or draw blank bitmap with black fill
         context.fillStyle = "black";
+
+        // clear canvas if it's not an update
+        if(!update) context.fillRect(0, 0, width, height);
 
         // paint each snap to canvas
         for (const snap of snaps) {
@@ -313,7 +317,8 @@ class MandelbrotSet extends React.Component {
         const throttlePassed = !this.lastFrameTime || (this.lastFrameTime + MandelbrotSet.framePeriod < timestamp);
 
         if (this.running && throttlePassed && this.canvas.current && this.model) {
-            this.drawSnaps(this.model.flush());
+            const {snaps, update} = this.model.flush();
+            this.drawSnaps(snaps, update);
             this.lastFrameTime = timestamp;
         }
 

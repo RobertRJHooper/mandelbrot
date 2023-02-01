@@ -1,9 +1,6 @@
 Next todo:
-image deltas - panning and zooming - by mouse, touch
 reform functions comments
 javascript modules - how to with comments
-put imaningary numbers to an object when not speed sensitive
-make local copies
 
 Features to make:
 high precision numbers
@@ -23,6 +20,9 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+make local copies
+put imaningary numbers to an object when not speed sensitive
+image deltas - panning and zooming - by mouse, touch
 throttle animation frame to 5fps?
 icons: change selector to join the dots icon, add box selector icon for mouse zooming
 use requestframe to handle throttling so the calculation pauses in the background and drawing is paced with the callback
