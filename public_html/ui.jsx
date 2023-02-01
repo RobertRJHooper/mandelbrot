@@ -291,7 +291,7 @@ class MandelbrotSet extends React.Component {
         context.fillStyle = "black";
 
         // clear canvas if it's not an update
-        if(!update) context.fillRect(0, 0, width, height);
+        if (!update) context.fillRect(0, 0, width, height);
 
         // paint each snap to canvas
         for (const snap of snaps) {
@@ -317,7 +317,7 @@ class MandelbrotSet extends React.Component {
         const throttlePassed = !this.lastFrameTime || (this.lastFrameTime + MandelbrotSet.framePeriod < timestamp);
 
         if (this.running && throttlePassed && this.canvas.current && this.model) {
-            const {snaps, update} = this.model.flush();
+            const { snaps, update } = this.model.flush();
             this.drawSnaps(snaps, update);
             this.lastFrameTime = timestamp;
         }
@@ -339,19 +339,21 @@ class MandelbrotSet extends React.Component {
 
     componentDidUpdate(prevProps, prevState) {
         const { zoom, postZoom, center, width, height } = this.props;
-
-        if (zoom != prevProps.zoom) {
+        const zoomUpdate = zoom != prevProps.zoom;
+        
+        if (zoomUpdate) {
             console.debug('update to zoom level', zoom);
             this.model.setZoom(zoom);
         }
 
-        const update = center.re != prevProps.center.re
+        const centerUpdate = zoomUpdate
+            || center.re != prevProps.center.re
             || center.im != prevProps.center.im
             || width != prevProps.width
             || height != prevProps.height
             || postZoom != prevProps.postZoom;
 
-        if (update) {
+        if (centerUpdate) {
             console.debug('update to center, width or height', center.re, center.im, width, height, postZoom);
             this.model.setCenter(center, width, height, postZoom);
         }
