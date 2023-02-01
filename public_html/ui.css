@@ -94,14 +94,6 @@
     cursor: grabbing;
 }
 
-.zooming-in {
-    cursor: zoom-in;
-}
-
-.zooming-out {
-    cursor: zoom-out;
-}
-
 .boxselecting {
     cursor: crosshair;
 }

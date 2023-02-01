@@ -56,7 +56,7 @@ class ModelClient {
     }
 
     /* set the center and zoom level in the workers */
-    setBaseZoom(zoom) {
+    setZoom(zoom) {
         if (!this.workers || !this.workers.length) {
             console.error("no workers set up");
             return;

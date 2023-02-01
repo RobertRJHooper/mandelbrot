@@ -219,9 +219,9 @@ async function loop() {
   }
 
   // iterate points in each panel
-  console.time('iterate');
+  //console.time('iterate');
   panels.iterate();
-  console.timeEnd('iterate');
+  //console.timeEnd('iterate');
   return true;
 }
 
