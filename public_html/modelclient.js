@@ -106,7 +106,7 @@ class ModelClient {
         }
 
         // update to all present snaps
-        this.updates = new Map(this.snaps);
+        this.updates = new Map();
         this.updatesFromBlank = true;
 
         // save working state
@@ -163,7 +163,9 @@ class ModelClient {
         // update throttle so more updates come
         this.setIdleTime();
 
-        // all done
-        return {snaps: updates.values(), update: !updatesFromBlank};
+        return {
+            snaps: updatesFromBlank ? Array.from(this.snaps.values()) : updates.values(),
+            update: !updatesFromBlank
+        };
     }
 }
