@@ -17,7 +17,7 @@
   <!-- remove tap highlighting on old IE-->
   <meta name="msapplication-tap-highlight" content="no" />
 
-  <!-- Note: when deploying, replace "development.js" with "production.min.js". -->
+  <!-- CDN links: Note: when deploying, replace "development.js" with "production.min.js"
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"
     integrity="sha512-m7nhpWHotpucPI37I4lPovL28Bm2BhAMV8poF3F8Z9oOEZ3jlxGzkgvG0EMt1mVL1xydr1erlBbmN90js/ssUw=="
     crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -30,9 +30,24 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"
     integrity="sha512-WFN04846sdKMIP5LKNphMaWzU7YpMyCU245etK3g/2ARYbPK9Ub18eG+ljU96qKRCWh+quCY7yefSmlkQw1ANQ=="
     crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  -->
 
+  <script src="lib/react.development.js"
+    integrity="sha512-m7nhpWHotpucPI37I4lPovL28Bm2BhAMV8poF3F8Z9oOEZ3jlxGzkgvG0EMt1mVL1xydr1erlBbmN90js/ssUw=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="lib/react-dom.development.min.js"
+    integrity="sha512-I5GJQRKGdj2miDs8ComgARfiAQiZJo/43YasH22qtweoG+YRXLTDYegxC/vPgw/ERxRzww/F4l4+8UiMmI20sw=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="lib/babel.js"
+    integrity="sha512-Nz+Y9jcqxT4mlh+W0MEBrRrBkci2Su4bEBmoY5RKAhVkN9SNb5EMEsTZnI0rS3xFQkfAnEAivaSsVVw6bZ5q7Q=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="lib/lodash.min.js"
+    integrity="sha512-WFN04846sdKMIP5LKNphMaWzU7YpMyCU245etK3g/2ARYbPK9Ub18eG+ljU96qKRCWh+quCY7yefSmlkQw1ANQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="lib/hammer.min.js"></script>
+
+  <!-- custom libraries -->
   <link rel="stylesheet" type="text/css" href="ui.css">
-  <script src="hammer.min.js"></script>
   <script src="model.js"></script>
   <script src="modelclient.js"></script>
   <script type="text/babel" src="ui.jsx"></script>
