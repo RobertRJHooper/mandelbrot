@@ -80,7 +80,7 @@ class Point {
 
 // give the complex numbers of a particular point to escape
 // not optimised for speed
-function mbSample(c_re, c_im, iterations = 100) {
+function mbSample(c_re, c_im, iterations = 1000) {
   const point = new Point(c_re, c_im);
 
   // runout of points

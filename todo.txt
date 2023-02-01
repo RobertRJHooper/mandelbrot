@@ -10,7 +10,6 @@ high precision numbers
 complete sampler draw
 brower url change should trigger reread of url parameterisation
 trace stick on click
-throttle animation frame to 5fps?
 limits to size of caches
 
 maybes:
@@ -24,6 +23,7 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+throttle animation frame to 5fps?
 icons: change selector to join the dots icon, add box selector icon for mouse zooming
 use requestframe to handle throttling so the calculation pauses in the background and drawing is paced with the callback
 move model client code to it's own file

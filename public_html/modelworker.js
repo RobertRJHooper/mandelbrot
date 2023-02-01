@@ -1,7 +1,7 @@
 "use strict";
 
 importScripts(
-  'https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js',
+  'lib/lodash.min.js',
   'model.js'
 );
 
@@ -168,7 +168,7 @@ onmessage = function (e) {
     }
 
     case 'center': {
-      const { center_re, center_im, width, height } = e.data;
+      const { center, width, height } = e.data;
       const panels = currentPanels;
 
       if (!panels) {
@@ -176,8 +176,8 @@ onmessage = function (e) {
         break;
       }
 
-      console.debug('setting center in worker', center_re, center_im);
-      panels.setCenter(center_re, center_im, width, height);
+      console.debug('setting center in worker', center.re, center.im);
+      panels.setCenter(center.re, center.im, width, height);
       break;
     }
 

@@ -1,31 +1,37 @@
 "use strict";
 
+function complex(re, im) {
+    return {re: re, im: im};
+}
+
 /* helper to convert pixel coordinates to imaginary plane point */
-function rectToImaginary(center_re, center_im, zoom, width, height, x, y) {
-    return [
-        center_re + (x - width / 2) / zoom,
-        center_im - (y - height / 2) / zoom,
-    ];
+function rectToImaginary(center, zoom, width, height, x, y) {
+    return complex(
+        center.re + (x - width / 2) / zoom,
+        center.im - (y - height / 2) / zoom, 
+    );
 }
 
 /* helper to convert imaginary plane point to pixel coordinates */
-function imaginarytoRect(center_re, center_im, zoom, width, height, point_re, point_im) {
-    return [
-        width / 2 + (point_re - center_re) * zoom,
-        height / 2 - (point_im - center_im) * zoom
-    ];
+function imaginarytoRect(center, zoom, width, height, point) {
+    return {
+        x: width / 2 + (point.re - center.re) * zoom,
+        y: height / 2 - (point.im - center.im) * zoom,
+    };
 }
 
 /* class to handle model calculations and communication with worker */
 class ModelClient {
     static maxWorkerCount = 1;
-    static timeToIdle = 5000; // ms to run before idleing workers
+
+    // ms to run before idling workers after the last flush call
+    static timeToIdle = 3000;
 
     constructor() {
         this.workers = null;
 
         // current working state
-        this.baseZoom = null;
+        this.zoom = null;
 
         // pixel offset to shift from the origin to the center point
         // updated when setting center point
@@ -67,7 +73,7 @@ class ModelClient {
         this.updates = new Map();
 
         // save state locally
-        this.baseZoom = zoom;
+        this.zoom = zoom;
         this.postZoom = 1;
         this.canvasOffsetX = null;
         this.canvasOffsetY = null;
@@ -84,7 +90,7 @@ class ModelClient {
     }
 
     /* set the center in the workers */
-    setCenter(center_re, center_im, width, height, postZoom) {
+    setCenter(center, width, height, postZoom) {
         if (!width || !height) {
             console.debug("trivial view, nothing to do");
             return;
@@ -100,21 +106,20 @@ class ModelClient {
 
         // save working state
         this.postZoom = postZoom;
-        this.canvasOffsetX = Math.round(width / 2 - center_re * this.baseZoom * postZoom);
-        this.canvasOffsetY = Math.round(height / 2 + center_im * this.baseZoom * postZoom);
+        this.canvasOffsetX = Math.round(width / 2 - center.re * this.zoom * postZoom);
+        this.canvasOffsetY = Math.round(height / 2 + center.im * this.zoom * postZoom);
 
         // send center to workers
         this.workers.forEach(worker => {
             worker.postMessage({
                 command: 'center',
-                center_re: center_re,
-                center_im: center_im,
+                center: center,
                 width: width,
                 height: height,
             });
         });
 
-        // lift idle limit
+        // lift idle limit for first frames
         this.setIdleTime();
     }
 
@@ -130,7 +135,7 @@ class ModelClient {
 
     workerMessage(message) {
         console.debug('frame received with', message.data.snaps.length, 'snaps.', 'adding to', this.updates.size, 'existing updates, and total cached snaps', this.snaps.size);
-        const expired = message.data.zoom != this.baseZoom;        
+        const expired = message.data.zoom != this.zoom;
 
         if (!expired) {
             for (const snap of message.data.snaps) {
