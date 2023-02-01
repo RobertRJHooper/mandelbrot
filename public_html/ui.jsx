@@ -683,7 +683,7 @@ class Selector extends React.Component {
     }
 
     handlePan(e) {
-        const position = this.getLocalCoordinates(e.srcEvent.clientX, e.srcEvent.clientY);
+        const position = this.getLocalCoordinates(e.center.x, e.center.y);
 
         switch (e.type) {
             case 'panstart': {
@@ -724,7 +724,25 @@ class Selector extends React.Component {
     }
 
     handlePinch(e) {
-        console.log('pinch', e);
+        document.getElementById('debug').innerHTML = `
+            <p>${e.center.x}</p>
+            <p>${e.center.y}</p>
+            <p>${e.scale}</p>
+        `;
+        return;
+
+        const position = this.getLocalCoordinates(e.center.x, e.center.y);
+        const rect = this.div.current.getBoundingClientRect();
+
+        // determine a translation so that the zoom point
+        // is fixed for the enlargement which happens about the center
+        const dx = -1 * (x - rect.width / 2) * dz;
+        const dy = -1 * (y - rect.height / 2) * dz;
+
+        // pass to master and schedule the release event
+        this.props.onPanAndZoom && this.props.onPanAndZoom(dx, dy, dz);
+        this.zoomCompleteDebounced();
+
     }
 
     handlePress(e) {
