@@ -6,6 +6,10 @@ class App extends React.Component {
     static defaultViewState = {
         center: complex(0, 0),
         zoom: 200,
+
+        // pinch zoom modifier to the magnification
+        // This is reset and baked into center
+        // at the end of the pinch
         postZoom: 1,
     };
 
@@ -39,7 +43,8 @@ class App extends React.Component {
 
         this.onBoxSelect = this.onBoxSelect.bind(this);
         this.onPointHover = this.onPointHover.bind(this);
-        this.onPanAndZoom = this.onPanAndZoom.bind(this);
+        this.onPan = this.onPan.bind(this);
+        this.onZoomChange = this.onZoomChange.bind(this);
         this.onZoomComplete = this.onZoomComplete.bind(this);
 
         // pushing zoom back to URL on updates with debounce throttling
@@ -131,7 +136,8 @@ class App extends React.Component {
                     mouseMode={this.state.mouseMode}
                     onPointHover={this.onPointHover}
                     onBoxSelect={this.onBoxSelect}
-                    onPanAndZoom={this.onPanAndZoom}
+                    onPan={this.onPan}
+                    onZoomChange={this.onZoomChange}
                     onZoomComplete={this.onZoomComplete}
                 />
 
@@ -168,16 +174,16 @@ class App extends React.Component {
     }
 
     onPointHover(x, y) {
-        if(this.state.sampleVisible) {
+        if (this.state.sampleVisible) {
             this.setState((state, props) => {
                 const { center, zoom, postZoom, width, height } = state;
                 const point = rectToImaginary(center, zoom * postZoom, width, height, x, y);
                 return { sample: mbSample(point.re, point.im) };
-            });    
+            });
         }
     }
 
-    onPanAndZoom(dx, dy, dzoom) {
+    onPan(dx, dy) {
         this.setState((state, props) => {
             const { center, zoom, postZoom, width, height } = state;
 
@@ -191,17 +197,17 @@ class App extends React.Component {
                 height / 2 - dy
             );
 
-            return {
-                center: p,
-                postZoom: postZoom * (1 + dzoom),
-            };
+            return { center: p };
         });
     }
 
-    // "bake" postZoom into the base zoom and recalculate
-    onZoomComplete() {
+    onZoomChange(middle, scale) {
+        this.setState({ postZoom: scale });
+    }
+
+    onZoomComplete(middle, scale) {
         this.setState((state, props) => ({
-            zoom: zoom * postZoom,
+            zoom: this.state.zoom * scale,
             postZoom: 1,
         }));
     }
@@ -495,12 +501,6 @@ class Selector extends React.Component {
         this.handlePan = this.handlePan.bind(this);
         this.handlePinch = this.handlePinch.bind(this);
         this.handlePress = this.handlePress.bind(this);
-        
-        // callback after zooming with debounce throttling
-        this.zoomCompleteDebounced = _.debounce(
-            () => this.props.onZoomComplete && this.props.onZoomComplete(),
-            300
-        );
     }
 
     getCursorClass() {
@@ -542,7 +542,7 @@ class Selector extends React.Component {
             hammer.get('pan').set({ direction: Hammer.DIRECTION_ALL });
             hammer.get('pinch').set({ enable: true });
             hammer.on('panstart panend panmove pancancel', this.handlePan);
-            hammer.on('pinch', this.handlePinch);
+            hammer.on('pinchstart pinchmove pinchend pinchcancel', this.handlePinch);
             hammer.on('press', this.handlePress);
 
             // standard listener for hovering event
@@ -554,7 +554,7 @@ class Selector extends React.Component {
         this.hammer && this.hammer.destroy();
         this.hammer = null;
 
-        if(this.divListening) {
+        if (this.divListening) {
             this.divListening.removeEventListener('mousemove', this.handleHover);
             this.divListening = null;
         }
@@ -697,7 +697,7 @@ class Selector extends React.Component {
                 if (this.props.mouseMode == "pan" && currentPoint) {
                     const dx = position.x - currentPoint.x;
                     const dy = position.y - currentPoint.y;
-                    this.props.onPanAndZoom && this.props.onPanAndZoom(dx, dy, 0);
+                    this.props.onPan && this.props.onPan(dx, dy);
                 }
 
                 // update state for box selection render
@@ -713,7 +713,7 @@ class Selector extends React.Component {
                     box.width && box.height && this.props.onBoxSelect && this.props.onBoxSelect(box);
                 }
 
-                // fall through to pancancel...
+                // fall through to pancancel
             }
 
             case 'pancancel': {
@@ -724,25 +724,27 @@ class Selector extends React.Component {
     }
 
     handlePinch(e) {
-        document.getElementById('debug').innerHTML = `
-            <p>${e.center.x}</p>
-            <p>${e.center.y}</p>
-            <p>${e.scale}</p>
-        `;
-        return;
-
         const position = this.getLocalCoordinates(e.center.x, e.center.y);
-        const rect = this.div.current.getBoundingClientRect();
+        const scale = e.scale;
 
-        // determine a translation so that the zoom point
-        // is fixed for the enlargement which happens about the center
-        const dx = -1 * (x - rect.width / 2) * dz;
-        const dy = -1 * (y - rect.height / 2) * dz;
+        switch (e.type) {
+            case 'pinchstart': {
+                break;
+            }
 
-        // pass to master and schedule the release event
-        this.props.onPanAndZoom && this.props.onPanAndZoom(dx, dy, dz);
-        this.zoomCompleteDebounced();
+            case 'pinchmove': {
+                this.props.onZoomChange && this.props.onZoomChange(position, scale);
+                break;
+            }
 
+            case 'pinchend': {
+                this.props.onZoomComplete && this.props.onZoomComplete(position, scale);
+            }
+
+            case 'pinchcancel': {
+                break;
+            }
+        }
     }
 
     handlePress(e) {
