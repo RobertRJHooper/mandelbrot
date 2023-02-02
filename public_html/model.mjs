@@ -1,62 +1,74 @@
-"use strict";
+import { Decimal } from 'lib/decimal.mjs';
 
 // is the point in the main cardiod where the series always converges?
 function mbInPrimary(re, im) {
+  if (re.lessThan(-0.76)
+    || re.moreThan(0.38)
+    || im.lessThan(-0.66)
+    || im.moreThan(0.66)
+  ) return false;
 
-  // short cut negative
-  if (re > 0.38 || re < -0.76 || im > 0.66 || im < -0.66) {
-    return false;
-  }
-
-  // short cut positive
-  if (re < 0.23 && re > -0.5 && im < 0.5 && im > -0.5) {
-    return true;
-  }
+  if (re.lessThan(0.23)
+    && re.moreThan(-0.5)
+    && im.lessThan(0.5)
+    && im.moreThan(-0.5)
+  ) return true;
 
   // full calculation (principle square root)
   // |sqrt(1 - 4c) - 1| < 1 with c = re + i * im
 
   // a = 1 - 4z
-  const a_re = -4 * re + 1;
-  const a_im = -4 * im;
-  const a_r = Math.sqrt(a_re * a_re + a_im * a_im);
+  const a_re = re.times(-4).add(1);
+  const a_im = im.times(-4);
+  const a_modulus = Decimal.sqrt(a_re.times(a_re).add(a_im.times(a_im)));
 
   // b = sqrt(a) = sqrt(1 - 4z)
-  const b_re = Math.sqrt((a_r + a_re) / 2);
-  const b_im = Math.sqrt((a_r - a_re) / 2) * Math.sign(a_im);
+  const b_re = Decimal.sqrt(a_modulus.add(a_re).divideBy(2));
+  const b_im = Decimal.sqrt(a_modulus.minus(a_re).divideBy(2).times(Decimal.sign(a_im)));
 
   // d = b - 1 = sqrt(1 - 4z) - 1
-  const d_re = b_re - 1;
+  const d_re = b_re.minus(1);
   const d_im = b_im;
 
   // |d| < 1
-  return d_re * d_re + d_im * d_im < 1;
+  return d_re.times(d_re).add(d_im.times(d_im)).lessThan(1);
 }
 
 // is the point in the secondary circle when zn has period two in limit?
 function mbInSecondary(re, im) {
-  if (re < -1.25 || re > -0.75 || im < -0.25 || im > -0.25) return false;
-  return (re + 1) * (re + 1) + im * im < 1 / 16;
+  if (re.lessThan(-1.25)
+    || re.moreThan(-0.75)
+    || im.lessThan(-0.25)
+    || im.moreThan(-0.25)
+  ) return false;
+
+  const re_plus_1 = re.add(1);
+  return re_plus_1.times(re_plus_1).add(im.times(im)).lessThan(1 / 16);
 }
 
+// check if a point has escaped and will always diverge
 function mbEscaped(re, im) {
-  if (re < -2 || re > 2 || im < -2 || im > 2) return true;
-  return re * re + im * im > 4;
+  if (re.lessThan(-2)
+    || re.moreThan(2)
+    || im.lessThan(-2)
+    || im.moreThan(2)
+  ) return true;
+  return re.times(re).add(im.times(im)).moreThan(4);
 }
 
 
 class Point {
   constructor(c_re, c_im) {
-    this.c_re = c_re;
-    this.c_im = c_im;
+    this.c_re = Decimal(c_re);
+    this.c_im = Decimal(c_im);
 
-    this.z_re = 0;
-    this.z_im = 0;
+    this.z_re = Decimal(0);
+    this.z_im = Decimal(0);
     this.age = 0;
     this.escapeAge = null;
 
     // we can know by formula that some values series remain bounded
-    this.boundedByFormula = mbInPrimary(c_re, c_im) || mbInSecondary(c_re, c_im);
+    this.boundedByFormula = mbInPrimary(this.c_re, this.c_im) || mbInSecondary(this.c_re, this.c_im);
 
     // flag whether the point is determined yet
     this.undetermined = !this.boundedByFormula;
@@ -64,8 +76,8 @@ class Point {
 
   iterate() {
     const { z_re, z_im, c_re, c_im } = this;
-    const re = z_re * z_re - z_im * z_im + c_re;
-    const im = 2 * z_re * z_im + c_im;
+    const re = z_re.times(z_re).minus(z_im.times(z_im)).plus(c_re);
+    const im = z_re.times(z_im).times(2).add(c_im);
 
     this.z_re = re;
     this.z_im = im;
@@ -148,9 +160,9 @@ const ageToRGB = _.range(ageToRGBCycleLength).map(i =>
 // Object that holds a regular rectangular grid of Point objects
 class MandelbrotGrid {
   constructor(center_re, center_im, zoom, width, height) {
-    this.center_re = center_re;
-    this.center_im = center_im;
-    this.zoom = zoom;
+    this.center_re = Decimal(center_re);
+    this.center_im = Decimal(center_im);
+    this.zoom = Decimal(zoom);
     this.width = width;
     this.height = height;
     this.image = null;
