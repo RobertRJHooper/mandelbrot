@@ -19,22 +19,20 @@ class Panel extends MandelbrotGrid {
     this.key = key;
     this.canvasX = canvasX;
     this.canvasY = canvasY;
-    this.dirty = true;
+    this.dirty = false;
   }
 
   // create a snapshot and clear dirty flag
   async snap() {
-    this.dirty = false;
+    const bitmap = await createImageBitmap(this.image);
 
-    // get the bitmap or blank shortcut
-    const blank = this.live.length == this.points.length;
-    const bitmap = blank ? null : await createImageBitmap(this.image);
+    // clear dirty flag
+    this.dirty = false;
 
     return {
       key: this.key,
       canvasX: this.canvasX,
       canvasY: this.canvasY,
-      length: Panel.length,
       bitmap: bitmap,
     };
   }

@@ -134,14 +134,6 @@ class MandelbrotGrid {
 
   initiateImage() {
     this.image = new ImageData(this.width, this.height);
-    const imageData = this.image.data;
-    const imageDataLength = this.image.data.length;
-
-    /*
-    // set image to opaque black
-    for (let i = 3; i < imageDataLength; i += 4) {
-      imageData[i] = 255;
-    } */
   }
 
   initiatePoints() {
@@ -223,6 +215,6 @@ class MandelbrotGrid {
     this.live = live;
 
     // return true iff pixels were updated
-    return determined.length;
+    return Boolean(determined.length);
   }
 }

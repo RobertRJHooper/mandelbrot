@@ -163,8 +163,11 @@ class ModelClient {
         // update throttle so more updates come
         this.setIdleTime();
 
+        // decide snaps to send
+        const snaps = flushFromBlank ? Array.from(this.snaps.values()) : updates.values();
+
         return {
-            snaps: flushFromBlank ? Array.from(this.snaps.values()) : updates.values(),
+            snaps: snaps,
             update: !flushFromBlank
         };
     }

@@ -287,29 +287,22 @@ class MandelbrotSet extends React.Component {
         const { canvasOffsetX, canvasOffsetY } = this.model;
         const context = this.canvas.current.getContext('2d', { alpha: false });
 
-        // clear canvas or draw blank bitmap with black fill
-        context.fillStyle = "black";
-
         // clear canvas if it's not an update
-        if (!update) context.fillRect(0, 0, width, height);
+        if (!update) {
+            context.fillStyle = "black";
+            context.fillRect(0, 0, width, height);
+        }
 
-        // paint each snap to canvas
         for (const snap of snaps) {
-            const { bitmap, canvasX, canvasY, length } = snap;
+            const { bitmap, canvasX, canvasY } = snap;
             const x = canvasOffsetX + canvasX * postZoom;
             const y = canvasOffsetY + canvasY * postZoom;
-            const l = length * postZoom;
-
+            const w = bitmap.width * postZoom;
+            const h = bitmap.height * postZoom;
+            
             // check the snap has at least one pixel on canvas
-            const visible = (x + l >= 0) && (x < width) && (y + l >= 0) && (y < height);
-
-            if (visible) {
-                if (bitmap) {
-                    context.drawImage(bitmap, x, y, l, l);
-                } else {
-                    context.fillRect(x, y, l, l);
-                }
-            }
+            const visible = (x + w >= 0) && (x < width) && (y + h >= 0) && (y < height);
+            if (visible) context.drawImage(bitmap, x, y, w, h);
         }
     }
 
