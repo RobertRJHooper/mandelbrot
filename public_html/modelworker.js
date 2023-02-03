@@ -1,6 +1,9 @@
 "use strict";
 
-importScripts('lib/lodash.min.js',
+importScripts(
+  'lib/lodash.min.js',
+  'lib/decimal.js',
+  'arithmetic.js',
   'model.js'
 );
 
