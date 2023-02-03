@@ -1,6 +1,8 @@
 Next todo:
 reform functions comments
-javascript modules - how to with comments
+rounding on url zoom
+add precision to url and feed precision through ui using strings for numbers
+move precision calculations all to the model client
 
 Features to make:
 high precision numbers
@@ -15,6 +17,7 @@ add stats to info panel
 get libraries local copy for speed
 
 maybe nots:
+javascript modules - how to with comments
 github releases mechanism for continous deployment
 convert numbered points to html elements so they zoom properly
 time limiting
