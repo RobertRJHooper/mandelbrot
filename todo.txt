@@ -5,7 +5,6 @@ add precision to url and feed precision through ui using strings for numbers
 move precision calculations all to the model client
 
 Features to make:
-high precision numbers
 complete sampler draw
 brower url change should trigger reread of url parameterisation
 trace stick on click
@@ -23,6 +22,7 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+high precision numbers
 make local copies
 put imaningary numbers to an object when not speed sensitive
 image deltas - panning and zooming - by mouse, touch

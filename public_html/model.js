@@ -198,7 +198,7 @@ class MandelbrotGrid {
         imageData[i + 1] = rgb[1];
         imageData[i + 2] = rgb[2];
         imageData[i + 3] = 255;
-      } else if (point.boundedByFormula) {
+      } else if (false && point.boundedByFormula) {
         imageData[i + 0] = 255;
         imageData[i + 1] = 0;
         imageData[i + 2] = 255;

@@ -80,9 +80,9 @@ function DecimalArithmetic(precision) {
   // re real im imaginary r radius
   A.BULBS = [
     { re: new D(-1.000), im: new D(+0.000), r: new D(0.250) },
-    { re: new D(-1.320), im: new D(+0.000), r: new D(0.065) },
-    { re: new D(-0.150), im: new D(+0.750), r: new D(0.090) },
-    { re: new D(-0.150), im: new D(-0.750), r: new D(0.090) },
+    //{ re: new D(-1.320), im: new D(+0.000), r: new D(0.065) },
+    //{ re: new D(-0.150), im: new D(+0.750), r: new D(0.090) },
+    //{ re: new D(-0.150), im: new D(-0.750), r: new D(0.090) },
   ];
 
   // add excluding and including bounding rectangles to the bulbs
@@ -204,9 +204,9 @@ function NativeArithmetic() {
   // re real im imaginary r radius
   A.BULBS = [
     { re: -1.000, im: +0.000, r: 0.250 },
-    { re: -1.320, im: +0.000, r: 0.065 },
-    { re: -0.150, im: +0.750, r: 0.090 },
-    { re: -0.150, im: -0.750, r: 0.090 },
+    //{ re: -1.320, im: +0.000, r: 0.065 },
+    //{ re: -0.150, im: +0.750, r: 0.090 },
+    //{ re: -0.150, im: -0.750, r: 0.090 },
   ];
 
   // add excluding and including bounding rectangles to the bulbs
