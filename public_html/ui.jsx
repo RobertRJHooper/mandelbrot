@@ -396,6 +396,8 @@ class SampleDisplay extends React.Component {
 
         // draw line between points
         context.beginPath();
+        context.strokeStyle = "white";
+        context.lineWidth = 2;
 
         // move to first point
         const point0 = points[0];
