@@ -3,6 +3,11 @@ reform functions comments
 rounding on url zoom
 add precision to url and feed precision through ui using strings for numbers
 move precision calculations all to the model client
+simplify SampleDisplay to avoid needing high precision numbers
+add iterations counter on main display
+allow canvas width and height to be specified or set to auto
+reset should not update the precision
+add tooltips to buttons
 
 Features to make:
 complete sampler draw

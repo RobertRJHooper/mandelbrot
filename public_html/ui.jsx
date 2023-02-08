@@ -1,11 +1,72 @@
 "use strict";
 
-var isNum = Number.isFinite
+/* get viewbox as specified in the URL, or return null if not valid */
+function pullURLParams() {
+    const url = new URL(window.location);
+    const searchParams = url.searchParams;
+
+    // retrieve from URL
+    const re = searchParams.get('re');
+    const im = searchParams.get('im');
+    const zoom = searchParams.get('zoom');
+    const precision = searchParams.get('precision');
+
+    // validate all as floating point numbers
+    const validator = /^[-+]?\d+\.?\d*$/;
+
+    for (const value of [re, im, zoom, precision]) {
+        if (typeof (value) == 'undefined' || value === null)
+            return;
+
+        if (!validator.test(value)) {
+            console.error('bad parameter in URL', value);
+            return;
+        }
+    }
+
+    // check zoom is positive
+    if (zoom.startsWith('-')) {
+        console.error('zoom must be positive');
+        return;
+    }
+
+    // check precision is positive
+    if (precision.startsWith('-')) {
+        console.error('precision must be positive');
+        return;
+    }
+
+    return {
+        center: { re: re, im: im },
+        zoom: zoom,
+        precision: Math.round(Number(precision)),
+    };
+}
+
+/* push the view to the URL if it's not already there */
+function pushURLParams(center, zoom, precision) {
+    const url = new URL(window.location);
+    const searchParams = url.searchParams;
+    searchParams.set('re', center.re);
+    searchParams.set('im', center.im);
+    searchParams.set('zoom', zoom);
+    searchParams.set('precision', precision);
+    window.history.pushState({}, '', url);
+}
 
 class App extends React.Component {
     static defaultViewState = {
-        center: complex(0, 0),
-        zoom: 200,
+
+        // high precision numbers are stored as strings in the UI
+        center: { re: "0", im: "0" },
+
+        // zoom is the number of pixels per unit in the imaginary plane
+        zoom: "200",
+
+        // number of significant figures that high precision number have
+        // for low values, regular Javascript floats are used
+        // for high values, custom (slow) Decimal.js objects are used
+        precision: 15,
 
         // pinch zoom modifier to the magnification
         // This is reset and baked into center
@@ -18,29 +79,38 @@ class App extends React.Component {
 
         this.state = {
             ...App.defaultViewState,
-            ...this.pullURL() || {},
+            ...pullURLParams() || {},
+
+            // pixel dimensions of the canvas display
             width: 0,
             height: 0,
 
-            // 'pan' or 'box-select'
+            // What does panning with the mouse or touch pad do
+            // 'pan' - move the center point around
+            // or 
+            // 'box-select' - draw a box and zoom into that box on release
             mouseMode: 'pan',
 
             // single (complex) point runout sample display
             sample: null,
             sampleVisible: false,
+
+            // popup info box
             infoModalVisible: false,
         }
 
         // keep track of container dimensions
         this.container = React.createRef();
+
+        // external state observation
         this.resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
-                if (entry.target == this.container.current) {
-                    this.pullContainerDimensions();
-                }
+                if (entry.target == this.container.current) this.pullContainerDimensions();
             }
         });
+        this.pushStateToURL = this.pushStateToURL.bind(this);
 
+        // callbacks for child elements
         this.onBoxSelect = this.onBoxSelect.bind(this);
         this.onPointHover = this.onPointHover.bind(this);
         this.onPan = this.onPan.bind(this);
@@ -48,45 +118,7 @@ class App extends React.Component {
         this.onZoomComplete = this.onZoomComplete.bind(this);
 
         // pushing zoom back to URL on updates with debounce throttling
-        this.pushURLDebounced = _.debounce(
-            () => this.pushURL(this.state.center, this.state.zoom * this.state.postZoom),
-            1000
-        );
-    }
-
-    /* get viewbox as specified in the URL, or return null */
-    pullURL() {
-        const url = new URL(window.location);
-        const searchParams = url.searchParams;
-
-        const x = Number(searchParams.get('x'));
-        const y = Number(searchParams.get('y'));
-        const zoom = Number(searchParams.get('zoom'));
-        const valid = isNum(x) && isNum(y) && isNum(zoom) && (zoom > 0);
-
-        // bad or missing numbers
-        if (!valid) return;
-
-        return {
-            center: complex(x, y),
-            zoom: zoom,
-            postZoom: 1,
-        };
-    }
-
-    /* push view to the URL if it's not already there */
-    pushURL(center, zoom) {
-        const current = this.pullURL();
-        const changed = !current || current.center.re != center.re || current.center.im != center.im || current.zoom != zoom;
-
-        if (changed) {
-            const url = new URL(window.location);
-            const searchParams = url.searchParams;
-            searchParams.set('x', center.re);
-            searchParams.set('y', center.im);
-            searchParams.set('zoom', zoom);
-            window.history.pushState({}, '', url);
-        }
+        this.pushStateToURLDebounced = _.debounce(this.pushStateToURL.bind(this), 1000);
     }
 
     /* pull the container dimensions into the state */
@@ -97,6 +129,26 @@ class App extends React.Component {
             width: container.offsetWidth,
             height: container.offsetHeight,
         });
+    }
+
+    pullStateFromURL() {
+        const current = pullURLParams();
+        current && this.setState(current);
+    }
+
+    pushStateToURL() {
+        const { center, zoom, precision } = this.state;
+        const current = pullURLParams();
+
+        // look for changes
+        const changed = !current
+            || current.center.re != center.re
+            || current.center.im != center.im
+            || current.zoom != zoom
+            || current.precision != precision;
+
+        // update URL on change
+        if (changed) pushURLParams(center, zoom, precision);
     }
 
     // outer render before dimensions are known
@@ -112,22 +164,22 @@ class App extends React.Component {
 
     // inner render when we know the container dimensions
     renderContent() {
+        const { center, zoom, precision, postZoom, width, height } = this.state;
+
         return (
             <div>
                 <MandelbrotSet
-                    center={this.state.center}
-                    zoom={this.state.zoom}
-                    postZoom={this.state.postZoom}
-                    width={this.state.width}
-                    height={this.state.height}
+                    center={center} zoom={zoom} precision={precision}
+                    postZoom={postZoom}
+                    canvasWidth={width}
+                    canvasHeight={height}
                 />
 
-                {this.state.sampleVisible &&
+                {this.state.sampleVisible && (postZoom == 1) &&
                     <SampleDisplay
-                        center={this.state.center}
-                        zoom={this.state.zoom * this.state.postZoom}
-                        width={this.state.width}
-                        height={this.state.height}
+                        center={center} zoom={zoom} precision={precision}
+                        width={width}
+                        height={height}
                         sample={this.state.sample}
                     />
                 }
@@ -160,24 +212,35 @@ class App extends React.Component {
 
     componentDidMount() {
         this.resizeObserver.observe(this.container.current);
-        this.pullContainerDimensions();
-    }
 
-    componentDidUpdate(prevProps, prevState) {
-        if (prevState.center != this.state.center || prevState.zoom != this.state.zoom) {
-            this.pushURLDebounced();
-        }
+        // get dimensions for the drawing canvas
+        this.pullContainerDimensions();
+
+        // monitor URL for changes to feed into state
+        window.addEventListener('popstate', this.pushStateToURL);
     }
 
     componentWillUnmount() {
         this.resizeObserver.disconnect();
+        window.removeEventListener('popstate', this.pushStateToURL);
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        const viewChanged = prevState.x != this.state.x
+            || prevState.y != this.state.y
+            || prevState.zoom != this.state.zoom
+            || prevState.precision != this.state.precision;
+
+        if (viewChanged) this.pushStateToURLDebounced();
     }
 
     onPointHover(x, y) {
         if (this.state.sampleVisible) {
             this.setState((state, props) => {
-                const { center, zoom, postZoom, width, height } = state;
-                const point = rectToImaginary(center, zoom * postZoom, width, height, x, y);
+                const { center, zoom, precision, width, height } = state;
+                const geo = getModelGeometry(center, zoom, precision);
+                const point = geo.rectToImaginary(width, height, x, y);
+                return {};
                 return { sample: mbSample(point.re, point.im) };
             });
         }
@@ -185,19 +248,18 @@ class App extends React.Component {
 
     onPan(dx, dy) {
         this.setState((state, props) => {
-            const { center, zoom, postZoom, width, height } = state;
+            const { center, zoom, precision, width, height } = state;
+            const geo = getModelGeometry(center, zoom, precision);
 
             // new center
-            const p = rectToImaginary(
-                center,
-                zoom * postZoom,
+            const newCenter = geo.rectToImaginary(
                 width,
                 height,
                 width / 2 - dx,
                 height / 2 - dy
             );
 
-            return { center: p };
+            return { center: newCenter };
         });
     }
 
@@ -205,21 +267,21 @@ class App extends React.Component {
         this.setState({ postZoom: scale });
     }
 
+    /* bake postZoom into base zoom */
     onZoomComplete() {
-        this.setState((state, props) => ({
-            zoom: state.zoom * state.postZoom,
-            postZoom: 1,
-        }));
+        this.setState((state, props) => {
+            const { center, zoom, precision, postZoom } = state;
+            const geo = getModelGeometry(center, zoom, precision);
+            return { zoom: geo.magnify(postZoom), postZoom: 1 };
+        });
     }
 
     onBoxSelect(box) {
         this.setState((state, props) => {
-            const { center, zoom, postZoom, width, height } = state;
+            const { center, zoom, precision, width, height } = state;
+            const geo = getModelGeometry(center, zoom, precision);
 
-            // new center
-            const p = rectToImaginary(
-                center,
-                zoom * postZoom,
+            const newCenter = geo.rectToImaginary(
                 width,
                 height,
                 box.left + box.width / 2,
@@ -229,11 +291,11 @@ class App extends React.Component {
             // zoom so the box is fully shown as big as possible
             const fitWidth = box.width / width > box.height / height;
             const factor = fitWidth ? width / box.width : state.height / box.height;
-            const newZoom = zoom * postZoom * factor;
+            const newZoom = geo.magnify(factor);
 
-            console.debug("sub box selected with center", p, "magnifying x", factor, 'to zoom level', newZoom);
+            console.debug("sub box selected with center", newCenter, "magnifying x", factor, 'to zoom level', newZoom);
             return {
-                center: p,
+                center: newCenter,
                 zoom: newZoom,
                 postZoom: 1,
                 mouseMode: 'pan',
@@ -246,17 +308,8 @@ class MandelbrotSet extends React.Component {
     static framePeriod = 100; // frame throlling in ms
 
     static defaultProps = {
-        center: complex(0, 0),
-
-        // pixels per unit length of imaginary plane
-        zoom: 100,
-
-        // post calculation magnification
-        postZoom: 1,
-
-        // canvas dimensions in pixels
-        width: 400,
-        height: 400,
+        canvasWidth: 400,
+        canvasHeight: 400,
     }
 
     constructor(props) {
@@ -275,34 +328,46 @@ class MandelbrotSet extends React.Component {
         return (
             <canvas
                 ref={this.canvas}
-                width={this.props.width}
-                height={this.props.height}
+                width={this.props.canvasWidth}
+                height={this.props.canvasHeight}
                 className="mandelbrotset">
             </canvas>
         );
     }
 
     drawSnaps(snaps, update) {
-        const { width, height, postZoom } = this.props;
-        const { canvasOffsetX, canvasOffsetY } = this.model;
+        const { center, zoom, precision, canvasWidth, canvasHeight, postZoom } = this.props;
+        const geo = getModelGeometry(center, zoom, precision);
+
+        // main drawing context
         const context = this.canvas.current.getContext('2d', { alpha: false });
 
         // clear canvas if it's not an update
         if (!update) {
             context.fillStyle = "black";
-            context.fillRect(0, 0, width, height);
+            context.fillRect(0, 0, canvasWidth, canvasHeight);
         }
 
+        // check the snap has at least one pixel on canvas and paint
         for (const snap of snaps) {
-            const { bitmap, canvasX, canvasY } = snap;
-            const x = canvasOffsetX + canvasX * postZoom;
-            const y = canvasOffsetY + canvasY * postZoom;
-            const w = bitmap.width * postZoom;
-            const h = bitmap.height * postZoom;
-            
-            // check the snap has at least one pixel on canvas
-            const visible = (x + w >= 0) && (x < width) && (y + h >= 0) && (y < height);
-            if (visible) context.drawImage(bitmap, x, y, w, h);
+            const { panelX, panelY, length, bitmap } = snap;
+            const { top, left } = geo.getPixelCoordinates(panelX, panelY, length, canvasWidth, canvasHeight, postZoom);
+            const lengthWithPostZoom = length * postZoom;
+
+            const visible = (left + lengthWithPostZoom >= 0)
+                && (left < canvasWidth)
+                && (top + lengthWithPostZoom >= 0)
+                && (top < canvasHeight);
+
+                /*
+                console.log('snap', snap);
+                console.log('top', top);
+                console.log('left', left);
+                console.log('lengthWithPostZoom', lengthWithPostZoom);
+                console.log('visible', visible);
+                */
+
+                if (visible) context.drawImage(bitmap, left, top, lengthWithPostZoom, lengthWithPostZoom);
         }
     }
 
@@ -325,30 +390,30 @@ class MandelbrotSet extends React.Component {
         window.requestAnimationFrame(this.animationFrame);
 
         // start model
-        const { zoom, center, width, height, postZoom } = this.props;
-        this.model.setZoom(zoom);
-        this.model.setCenter(center, width, height, postZoom);
+        const { zoom, precision, center, canvasWidth, canvasHeight } = this.props;
+        this.model.setup(zoom, precision);
+        this.model.setView(center, canvasWidth, canvasHeight);
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { zoom, postZoom, center, width, height } = this.props;
-        const zoomUpdate = zoom != prevProps.zoom;
-        
-        if (zoomUpdate) {
-            console.debug('update to zoom level', zoom);
-            this.model.setZoom(zoom);
+        const { zoom, precision, postZoom, center, canvasWidth, canvasHeight } = this.props;
+
+        const setupUpdate = zoom != prevProps.zoom || precision != prevProps.precision;
+        if (setupUpdate) {
+            console.debug('update to zoom level and/or precision', zoom, precision);
+            this.model.setup(zoom, precision);
         }
 
-        const centerUpdate = zoomUpdate
+        const viewUpdate = setupUpdate
             || center.re != prevProps.center.re
             || center.im != prevProps.center.im
-            || width != prevProps.width
-            || height != prevProps.height
+            || canvasWidth != prevProps.canvasWidth
+            || canvasHeight != prevProps.canvasHeight
             || postZoom != prevProps.postZoom;
 
-        if (centerUpdate) {
-            console.debug('update to center, width or height', center.re, center.im, width, height, postZoom);
-            this.model.setCenter(center, width, height, postZoom);
+        if (viewUpdate) {
+            console.debug('update to view', center.re, center.im, canvasWidth, canvasHeight, postZoom);
+            this.model.setView(center, canvasWidth, canvasHeight, postZoom);
         }
     }
 
@@ -615,66 +680,6 @@ class Selector extends React.Component {
 
         return { x: x, y: y };
     }
-
-    /* old code
-
-    // single touch moving or mouse move after primary click down
-    handleMove(clientX, clientY) {
-        const [x, y] = this.getLocalCoordinates(clientX, clientY);
-        const { pointX, pointY, selectedPointX, selectedPointY } = this.state;
-        const current = isNum(pointX) && isNum(pointY);
-        const selected = isNum(selectedPointX) && isNum(selectedPointY);
-
-        // callbacks
-        if (!selected) {
-            this.props.onPointHover && this.props.onPointHover(x, y);
-        } else if (this.props.mouseMode == "pan") {
-            const dx = x - pointX;
-            const dy = y - pointX;
-            current && (dx || dy) && this.props.onPanAndZoom && this.props.onPanAndZoom(dx, dy, 0);
-        }
-
-        // update state
-        this.setState({ pointX: x, pointY: y });
-    }
-
-    // single touch released or mouse primary released
-    handleRelease(clientX, clientY) {
-        const [x, y] = this.getLocalCoordinates(clientX, clientY);
-        const { selectedPointX, selectedPointY } = this.state;
-        const selected = isNum(selectedPointX) && isNum(selectedPointY);
-        const delta = (x != selectedPointX) || (y != selectedPointY);
-
-        // callbacks
-        if (!delta) {
-            this.props.onPointSelect && this.props.onPointSelect(x, y);
-        } else if (this.props.mouseMode == "box-select") {
-            if (selected) {
-                const box = this.boxGeometry(selectedPointX, selectedPointY, x, y);
-                box.width && box.height && this.props.onBoxSelect && this.props.onBoxSelect(box);
-            }
-        }
-
-        // update state
-        this.setState({ selectedPointX: null, selectedPointY: null });
-    }
-
-    // handle a zoom of given factor about a point x, y in the view
-    handleZoom(x, y, dz) {
-        console.debug('zoom event', x, y, dz);
-        const rect = this.div.current.getBoundingClientRect();
-
-        // determine a translation so that the zoom point
-        // is fixed for the enlargement which happens about the center
-        const dx = -1 * (x - rect.width / 2) * dz;
-        const dy = -1 * (y - rect.height / 2) * dz;
-
-        // pass to master and schedule the release event
-        this.props.onPanAndZoom && this.props.onPanAndZoom(dx, dy, dz);
-        this.zoomCompleteDebounced();
-    }
-
-    */
 
     handleHover(e) {
         const position = this.getLocalCoordinates(e.clientX, e.clientY);

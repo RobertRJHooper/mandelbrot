@@ -1,20 +1,40 @@
+// return an object containing arithmetic operations
+// for the given precision
+function getArithmetic(precision) {
+  if (precision <= 19) {
+    return NativeArithmetic();
+  } else {
+    return DecimalArithmetic(precision);
+  }
+}
+
 
 // varying precision floating point functions
 function DecimalArithmetic(precision) {
-  let D = Decimal.clone({ precision: precision, defaults: true });
-
+  const D = Decimal.clone({ precision: precision, defaults: true });
+  
   // build to Artithmetic constants/functions set
   let A = {
     Number: x => new D(x),
+    N: x => new D(x),
+    demote: x => x.toNumber(),
+
     mul: D.mul.bind(D),
     div: D.div.bind(D),
     add: D.add.bind(D),
     sub: D.sub.bind(D),
+    mod: D.mod.bind(D),
+    neg: x => x.neg(),
     lt: (x, y) => x.lt(y),
     gt: (x, y) => x.gt(y),
 
+    floor: x => x.floor(),
+    ceil: x => x.ceil(),
+    round: x => x.round(),
+
     // constants
     ZERO: new D(0),
+    HALF: (new D(1)).div(2),
     ONE: new D(1),
     SQRT2: new D(2).sqrt(),
     NEG_SQRT2: new D(2).sqrt().mul(-1),
@@ -123,20 +143,31 @@ function DecimalArithmetic(precision) {
 
 // use normal javascript floats
 function NativeArithmetic() {
-  let D = Number;
+  const D = Number;
 
   // build to Artithmetic constants/functions set
   let A = {
     Number: D,
+    N: D,
+    demote: x => x,
+
     mul: (a, b) => a * b,
     div: (a, b) => a / b,
     add: (a, b) => a + b,
     sub: (a, b) => a - b,
+    neg: a => -a,
+    mod: (x, y) => x % y,
+
     lt: (x, y) => x < y,
     gt: (x, y) => x > y,
 
+    floor: x => Math.floor(x),
+    ceil: x => Math.ceil(x),
+    round: x => Math.round(x),
+
     // constants
     ZERO: 0,
+    HALF: 0.5,
     ONE: 1,
     SQRT2: Math.sqrt(2),
     NEG_SQRT2: -1 * Math.sqrt(2),

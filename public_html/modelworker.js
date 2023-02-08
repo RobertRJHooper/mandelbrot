@@ -10,174 +10,232 @@ importScripts(
 // minmum period between image posts
 const frameThrottlePeriod = 250;
 
+// current Arithmetic system in use (depending on precision required)
+var Arithmetic;
+
+// current frame controller
+var currentPanels;
+
 // grid class representing a square of the set
 class Panel extends MandelbrotGrid {
-  static length = 32;
+  constructor(key, panelX, panelY, zoom, length) {
+    const { N, mul, div, add, sub } = Arithmetic;
 
-  constructor(key, center_re, center_im, zoom, canvasX, canvasY) {
-    super(center_re, center_im, zoom, Panel.length, Panel.length);
-    this.key = key;
-    this.canvasX = canvasX;
-    this.canvasY = canvasY;
+    const panelLengthComplexPlane = div(length, zoom);
+    const halfPanelLengthComplexPlane = div(panelLengthComplexPlane, 2);
+
+    // demote BigInt to arithmetic precision
+    const panelX_ = N(panelX);
+    const panelY_ = N(panelY);
+
+    // center of the panel in pixels
+    const pixel_re = add(mul(length, panelX_), halfPanelLengthComplexPlane);
+    const pixel_im = add(mul(length, panelY_), halfPanelLengthComplexPlane);
+
+    // center of the panel in complex coordinates
+    const center_re = div(pixel_re, zoom);
+    const center_im = div(pixel_im, zoom);
+
+    // set up grid
+    super(center_re, center_im, zoom, length, length);
     this.dirty = false;
+
+    // snap template
+    this.snapTemplate = {
+      key: key,
+      panelX: panelX.toString(),
+      panelY: panelY.toString(),
+      length: length,
+    }
   }
 
   // create a snapshot and clear dirty flag
   async snap() {
     const bitmap = await createImageBitmap(this.image);
-
-    // clear dirty flag
     this.dirty = false;
 
     return {
-      key: this.key,
-      canvasX: this.canvasX,
-      canvasY: this.canvasY,
+      ...this.snapTemplate,
       bitmap: bitmap,
     };
   }
 
   iterate() {
-    if(super.iterate()) {
-      this.dirty = true;
-    }
+    if (super.iterate()) this.dirty = true;
   }
 }
 
 class Panels {
-  constructor(zoom, step, offset) {
+  constructor(setupReference, zoom, precision, panelLength) {
+    this.setupReference = setupReference;
     this.zoom = zoom;
+    this.precision = precision;
 
-    // only consider a subset of panels determined
-    // by step and offset to facilitate multitasking
-    this.step = step;
-    this.offset = offset;
+    // width and height of each panel in pixels
+    this.panelLength = panelLength;
 
     // storage for all cached frames
     this.panels = new Map();
 
-    // current center point and panels around it
-    this.center = null;
-    this.visiblePanels = [];
+    // active panels that this worker is currently working on
+    this.activePanels = [];
 
     // limiters
     this.frameTime = 0;
     this.timeToIdle = 0;
   }
 
-  // set panels around the point that cover width and height
-  setCenter(center_re, center_im, width, height) {
-    const { zoom, step, offset } = this;
+  /*
+  Set the active panels based on an iterable of keys.
+  The key is also the coordinates in units of panels on the
+  imaginary plane
+  */
+  setActivePanels(coordinates) {
+    this.activePanels = [];
 
-    // save current point
-    this.center_re = center_re;
-    this.center_im = center_im;
+    for (const [panelX, panelY] of coordinates) {
+      const key = `${panelX} ${panelY}`;
+      let panel = this.panels.get(key);
 
-    // total view box in units of panels about origin
-    const viewWidth = width / Panel.length;
-    const viewHeight = height / Panel.length;
+      // create new one
+      if (!panel) {
+        panel = new Panel(key, panelX, panelY, this.zoom, this.panelLength);
+        panel.initiate();
+        this.panels.set(key, panel);
+      }
 
-    // panel center in units of panels
-    const panel_re = center_re * zoom / Panel.length;
-    const panel_im = center_im * zoom / Panel.length;
+      this.activePanels.push(panel);
+    }
+  }
 
-    // viewbox in panels
-    const xMin = Math.floor(panel_re - viewWidth / 2);
-    const xMax = Math.ceil(panel_re + viewWidth / 2);
-    const yMin = Math.floor(panel_im - viewHeight / 2);
-    const yMax = Math.ceil(panel_im + viewHeight / 2);
+  /* determine active panel coordinates around a center */
+  getPanelsForView(center_re, center_im, width, height, step, offset) {
+    const { demote, mul, div, add, sub, floor, mod } = Arithmetic;
+    const { zoom, panelLength } = this;
 
-    // get panels from the cache of create new ones
-    const visiblePanels = [];
+    // panel length on complex plane
+    const panelLengthComplexPlane = div(panelLength, zoom);
 
-    for (let panelX = xMin; panelX < xMax; panelX++) {
-      for (let panelY = yMin; panelY < yMax; panelY++) {
-        if ((panelX + panelY - offset) % step) continue;
+    // center in units of panel lengths
+    const center_pre = div(center_re, panelLengthComplexPlane);
+    const center_pim = div(center_im, panelLengthComplexPlane);
 
-        const key = `${panelX} ${panelY}`;
-        let panel = this.panels.get(key);
+    // total view box in units of panel lengths about origin divided by two
+    const halfWidthInPanels = div(div(width, panelLength), 2);
+    const halfHeightInPanels = div(div(height, panelLength), 2);
 
-        // create panel if it is not already in the cache
-        if (!panel) {
-          const panelCenter_re = (panelX + 0.5) * Panel.length / zoom;
-          const panelCenter_im = (panelY + 0.5) * Panel.length / zoom;
+    // viewbox lower bounds in units of panel lengths
+    const xMin = floor(sub(center_pre, halfWidthInPanels));
+    const yMin = floor(sub(center_pim, halfHeightInPanels));
 
-          // canvas coordinates of bottom left
-          // on the canvas Y-axis increasing is downwards (multiple panelY by -1)
-          // and the box is painted downwards (add 1 to panelY)
-          const canvasX = panelX * Panel.length;
-          const canvasY = -1 * (panelY + 1) * Panel.length;
+    // determine modulo offset of bounding panels
+    const offset0 = demote(mod(add(xMin, yMin), step));
 
-          panel = new Panel(key, panelCenter_re, panelCenter_im, zoom, canvasX, canvasY);
-          panel.initiate();
-          this.panels.set(key, panel);
-        }
+    // width and height of the view in panels
+    // rounding up and adding one means the view is covered in worst case
+    const widthInPanels = Math.ceil(width / panelLength) + 1;
+    const heightInPanels = Math.ceil(height / panelLength) + 1;
 
-        visiblePanels.push(panel);
+    // generate keys - got to be careful to avoid infinite loop
+    // when rounding on huge numbers means add(xMin, i) == xMin
+    // when the precision has expired
+    const out = [];
+
+    for (let j = 0; j < heightInPanels; j++) {
+      const panelY = add(yMin, j);
+
+      for (let i = 0; i < widthInPanels; i++) {
+
+        // multi worker striping
+        if ((offset0 + i + j - offset) % step)
+          continue;
+
+        const panelX = add(xMin, i);
+        out.push([panelX, panelY]);
       }
     }
 
-    // state
-    console.debug('visible panels selected', visiblePanels.length);
-    this.visiblePanels = visiblePanels;
-
-    // reset frame time so first frame isn't time throttled
-    this.frameTime = 0;
+    return out;
   }
 
   // iterate all current panels
   iterate() {
-    for (const panel of this.panels.values()) {
-      panel.iterate();
-    }
+    for (const panel of this.activePanels) panel.iterate();
   }
 
   // post updates for visible panels
   async post() {
-    const dirtyPanels = this.visiblePanels.filter(p => p.dirty);
+    const dirtyPanels = this.activePanels.filter(p => p.dirty);
 
     // no dirty panels to send
-    if (!dirtyPanels.length) {
-      return false;
-    }
+    if (!dirtyPanels.length) return false;
 
+    // generate snap bitmaps
     const snaps = await Promise.all(dirtyPanels.map(p => p.snap()));
-    console.debug('posting frame of dirty panels', dirtyPanels.length, 'of', this.visiblePanels.length);
+    console.debug('posting frame of dirty panels', dirtyPanels.length, 'of', this.activePanels.length);
 
     postMessage({
-      zoom: this.zoom,
+      setupReference: this.setupReference,
       snaps: snaps,
     }, snaps.map(s => s.bitmap).filter(s => s));
 
-    // return signally something was sent
+    // return signaling something was sent
     return true;
   }
 }
 
-// current frame controller
-var currentPanels = null;
-
 // incoming message handler
 onmessage = function (e) {
   switch (e.data.command) {
-    case 'zoom': {
-      const { zoom, step, offset } = e.data;
-      console.debug('setting up worker with zoom level', zoom, 'step', step, 'offset', offset);
-      currentPanels = new Panels(zoom, step, offset);
+    case 'setup': {
+      const { setupReference, zoom, panelLength, precision } = e.data;
+      console.debug('setting up with reference', setupReference);
+
+      // first setup the arithmetic structure used by worker
+      console.debug('setting arithmetic precision', precision);
+      Arithmetic = getArithmetic(precision);
+
+      // set up panels controoler
+      console.debug('setting zoom', zoom)
+      console.debug('setting panelLength', panelLength);
+
+      const N = Arithmetic.Number;
+      currentPanels = new Panels(
+        setupReference,
+        N(zoom),
+        precision,
+        panelLength
+      );
+
       break;
     }
 
-    case 'center': {
-      const { center, width, height } = e.data;
+    case 'view': {
       const panels = currentPanels;
 
       if (!panels) {
-        console.warn('zoom level not setup yet while setting center');
+        console.warn('not setup with setting view');
         break;
       }
 
-      console.debug('setting center in worker', center.re, center.im);
-      panels.setCenter(center.re, center.im, width, height);
+      const { center_re, center_im, width, height, step, offset } = e.data;
+      const N = Arithmetic.Number;
+
+      // get visible panel keys
+      console.debug('setting center', center_re, center_im);
+
+      const active = panels.getPanelsForView(
+        N(center_re),
+        N(center_im),
+        width,
+        height,
+        step,
+        offset
+      );
+
+      // set visible panels for calculation
+      console.debug('setting active panels numbering', active.length);
+      panels.setActivePanels(active);
       break;
     }
 
@@ -185,7 +243,7 @@ onmessage = function (e) {
       const panels = currentPanels;
 
       if (!panels) {
-        console.warn('limit command ignored becaue there are no current panels')
+        console.warn('limit command ignored while worker not setup')
         break;
       }
 

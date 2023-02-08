@@ -1,8 +1,8 @@
 "use strict";
 
-// multiple precision floating point numbers
-var Arithmetic = DecimalArithmetic(19);
-var Arithmetic = NativeArithmetic();
+// these functions require an arithmetic system set up
+// under the global variable Artihmetic with the required precision
+// var Arithmetic = getArithmetic(15);
 
 // check if the point is in a known region of mandelbrot set using formula
 function mbByFormula(re, im) {
@@ -65,12 +65,12 @@ class Point {
     this.boundedByFormula = mbByFormula(this.c_re, this.c_im);
 
     // flag whether the point escape is determined yet
-    this.undetermined = !this.boundedByFormula;
+    this.determined = this.boundedByFormula;
   }
 
   iterate() {
     const { z_re, z_im, c_re, c_im } = this;
-    const {mul, add, sub, TWO} = Arithmetic;
+    const {mul, add, sub, TWO, mbEscaped} = Arithmetic;
 
     const z_re2 = mul(z_re, z_re);
     const z_im2 = mul(z_im, z_im);
@@ -81,9 +81,9 @@ class Point {
     this.z_im = im;
     this.age += 1;
 
-    if (Arithmetic.mbEscaped(re, im) && this.undetermined) {
+    if (mbEscaped(re, im) && !this.determined) {
       this.escapeAge = this.age;
-      this.undetermined = false;
+      this.determined = true;
     }
   }
 }
@@ -160,6 +160,12 @@ class MandelbrotGrid {
       im.push(x);
     }
 
+    /*
+    console.log(center_re, center_im, zoom, width, height);
+    console.log('im', im);
+    console.log('re', re);
+    */
+
     // get points in the grid
     const points = [];
     for (let j = 0; j < height; j++) {
@@ -184,7 +190,7 @@ class MandelbrotGrid {
 
   // iterals all live points and returns true iff the image changed
   iterate() {
-    const [live, determined] = _.partition(this.live, p => (p.iterate() || p.undetermined));
+    const [determined, live] = _.partition(this.live, p => (p.iterate() || p.determined));
 
     // colour newly determined points
     const imageData = this.image.data;
@@ -198,7 +204,7 @@ class MandelbrotGrid {
         imageData[i + 1] = rgb[1];
         imageData[i + 2] = rgb[2];
         imageData[i + 3] = 255;
-      } else if (false && point.boundedByFormula) {
+      } else if (point.boundedByFormula) {
         imageData[i + 0] = 255;
         imageData[i + 1] = 0;
         imageData[i + 2] = 255;
