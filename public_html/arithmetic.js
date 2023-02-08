@@ -11,19 +11,27 @@ function getArithmetic(precision) {
 
 // varying precision floating point functions
 function DecimalArithmetic(precision) {
-  const D = Decimal.clone({ precision: precision, defaults: true });
-  
+  const N = Decimal.clone({ precision: precision, defaults: true });
+
   // build to Artithmetic constants/functions set
   let A = {
-    Number: x => new D(x),
-    N: x => new D(x),
-    demote: x => x.toNumber(),
+    N: x => {
+      switch (typeof (x)) {
+        case 'bigint':
+          return N(x.toString());
+        default:
+          return N(x)
+      }
+    },
 
-    mul: D.mul.bind(D),
-    div: D.div.bind(D),
-    add: D.add.bind(D),
-    sub: D.sub.bind(D),
-    mod: D.mod.bind(D),
+    toNumber: x => x.toNumber(),
+    toBigInt: x => BigInt(x.toString()),
+
+    mul: N.mul.bind(N),
+    div: N.div.bind(N),
+    add: N.add.bind(N),
+    sub: N.sub.bind(N),
+    mod: N.mod.bind(N),
     neg: x => x.neg(),
     lt: (x, y) => x.lt(y),
     gt: (x, y) => x.gt(y),
@@ -33,15 +41,15 @@ function DecimalArithmetic(precision) {
     round: x => x.round(),
 
     // constants
-    ZERO: new D(0),
-    HALF: (new D(1)).div(2),
-    ONE: new D(1),
-    SQRT2: new D(2).sqrt(),
-    NEG_SQRT2: new D(2).sqrt().mul(-1),
-    TWO: new D(2),
-    NEG_TWO: new D(-2),
-    FOUR: new D(4),
-    NEG_FOUR: new D(-4),
+    ZERO: new N(0),
+    HALF: (new N(1)).div(2),
+    ONE: new N(1),
+    SQRT2: new N(2).sqrt(),
+    NEG_SQRT2: new N(2).sqrt().mul(-1),
+    TWO: new N(2),
+    NEG_TWO: new N(-2),
+    FOUR: new N(4),
+    NEG_FOUR: new N(-4),
   };
 
   // mandelbrot escape test:
@@ -60,11 +68,11 @@ function DecimalArithmetic(precision) {
 
   // smallest bounding rectangle for the main cardiod
   // left, right, bottom, top
-  A.CARIDOID_EXC = [new D(-0.76), new D(0.38), new D(-0.66), new D(+0.66)];
+  A.CARIDOID_EXC = [new N(-0.76), new N(0.38), new N(-0.66), new N(+0.66)];
 
   // maximum internal rectangle for the main cardiod
   // left, right, bottom, top
-  A.CARDIOID_INC = [new D(-0.5), new D(0.23), new D(-0.5), new D(+0.5)];
+  A.CARDIOID_INC = [new N(-0.5), new N(0.23), new N(-0.5), new N(+0.5)];
 
   // is the point in the main cardiod region
   A.mbInMainCardiod = function (re, im) {
@@ -80,11 +88,11 @@ function DecimalArithmetic(precision) {
     // u = 1 - 4z
     const u_re = re.mul(A.NEG_FOUR).add(A.ONE);
     const u_im = im.mul(A.NEG_FOUR);
-    const u_modulus = D.sqrt(u_re.mul(u_re).add(u_im.mul(u_im)));
+    const u_modulus = N.sqrt(u_re.mul(u_re).add(u_im.mul(u_im)));
 
     // v = sqrt(u) = sqrt(1 - 4z)
-    const v_re = D.sqrt(u_modulus.add(u_re).div(A.TWO));
-    const v_im = D.sqrt(u_modulus.sub(u_re).div(A.TWO)).mul(D.sign(u_im));
+    const v_re = N.sqrt(u_modulus.add(u_re).div(A.TWO));
+    const v_im = N.sqrt(u_modulus.sub(u_re).div(A.TWO)).mul(N.sign(u_im));
 
     // w = v - 1 = sqrt(1 - 4z) - 1
     const w_re = v_re.sub(A.ONE);
@@ -99,7 +107,7 @@ function DecimalArithmetic(precision) {
   // primary circles known to be in the mandelbrot set
   // re real im imaginary r radius
   A.BULBS = [
-    { re: new D(-1.000), im: new D(+0.000), r: new D(0.250) },
+    { re: new N(-1.000), im: new N(+0.000), r: new N(0.250) },
     //{ re: new D(-1.320), im: new D(+0.000), r: new D(0.065) },
     //{ re: new D(-0.150), im: new D(+0.750), r: new D(0.090) },
     //{ re: new D(-0.150), im: new D(-0.750), r: new D(0.090) },
@@ -117,7 +125,7 @@ function DecimalArithmetic(precision) {
   }
 
   // is a point in the given bulb circle
-  A.mbBulbContains = function(bulb, re, im) {
+  A.mbBulbContains = function (bulb, re, im) {
     const [a, b, c, d] = bulb.exclusion;
     if (re.lt(a) || re.gt(b) || im.lt(c) || im.gt(d)) return false;
 
@@ -133,7 +141,7 @@ function DecimalArithmetic(precision) {
   }
 
   // is the point in one of the major bulbs?
-  A.mbInPrimaryBulb = function(re, im) {
+  A.mbInPrimaryBulb = function (re, im) {
     return A.BULBS.some(bulb => A.mbBulbContains(bulb, re, im));
   }
 
@@ -143,13 +151,13 @@ function DecimalArithmetic(precision) {
 
 // use normal javascript floats
 function NativeArithmetic() {
-  const D = Number;
+  const N = Number;
 
   // build to Artithmetic constants/functions set
   let A = {
-    Number: D,
-    N: D,
-    demote: x => x,
+    N: N,
+    toNumber: x => x,
+    toBigInt: x => BigInt(x.toString()),
 
     mul: (a, b) => a * b,
     div: (a, b) => a / b,
@@ -252,7 +260,7 @@ function NativeArithmetic() {
   }
 
   // is a point in the given bulb circle
-  A.mbBulbContains = function(bulb, re, im) {
+  A.mbBulbContains = function (bulb, re, im) {
     const [a, b, c, d] = bulb.exclusion;
     if (re < a || re > b || im < c || im > d) return false;
 
@@ -268,7 +276,7 @@ function NativeArithmetic() {
   }
 
   // is the point in one of the major bulbs?
-  A.mbInPrimaryBulb = function(re, im) {
+  A.mbInPrimaryBulb = function (re, im) {
     return A.BULBS.some(bulb => A.mbBulbContains(bulb, re, im));
   }
 

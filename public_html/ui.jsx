@@ -39,7 +39,7 @@ function pullURLParams() {
     return {
         center: { re: re, im: im },
         zoom: zoom,
-        precision: Math.round(Number(precision)),
+        precision: Number(precision),
     };
 }
 

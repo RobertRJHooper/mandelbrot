@@ -21,19 +21,19 @@ class ModelGeometry {
         const { center_re, center_im, zoom } = this;
 
         // pixels from center point
-        const pixels_re = sub(x, div(width, 2));
-        const pixels_im = sub(y, div(height, 2));
+        const pixelsX = sub(x, div(width, 2));
+        const pixelsY = sub(y, div(height, 2));
 
         // convert to imaginary plane units and reset origin
-        return {
-            re: add(center_re, div(pixels_re, zoom)),
-            im: sub(center_im, div(pixels_im, zoom)),
-        }
+        const re = add(center_re, div(pixelsX, zoom));
+        const im = sub(center_im, div(pixelsY, zoom));
+
+        return { re: re, im: im, }
     }
 
     /* helper to convert imaginary plane point to pixel coordinates */
     imaginarytoRect(width, height, point) {
-        const { N, demote, add, sub, mul, div } = this.A;
+        const { N, toNumber, add, sub, mul, div } = this.A;
         const { center_re, center_im, zoom } = this;
 
         // align precison
@@ -50,42 +50,44 @@ class ModelGeometry {
 
         // convert to native numbers for pixel coordinates
         return {
-            x: demote(x),
-            y: demote(y),
+            x: toNumber(x),
+            y: toNumber(y),
         };
     }
 
     /* return the new zoom value give a further magnification factor */
     magnify(factor) {
-        const {mul, round} = this.A;
+        const { mul, round } = this.A;
         return round(mul(this.zoom, factor));
     }
 
     /* get canvas coordinates from panel coordinates */
     getPixelCoordinates(panelX, panelY, panelLength, width, height, postZoom) {
-        const { N, demote, add, sub, mul, div } = this.A;
+        const { N, toBigInt, round, mul } = this.A;
         const { center_re, center_im, zoom } = this;
 
-        // promote/demote to Artithmetic precision
-        const zoom_ = N(zoom);
-        const panelX_ = N(panelX);
-        const panelY_ = N(panelY);
+        // panel length as a bigint
+        const panelLengthN = BigInt(panelLength);
 
         // pixel coordinates relative to origin
         // shift y one panel down because painting is done downwards
-        const px = mul(panelX_, panelLength);
-        const py = mul(add(panelY_, 1), panelLength);
+        const pixelX = panelX * panelLengthN;
+        const pixelY = (panelY + 1n) * panelLengthN;
 
-        // pixel coordinates relative to center
-        const x = sub(px, mul(center_re, zoom_));
-        const y = sub(py, mul(center_im, zoom_));
+        // center coordinates in pixels
+        const centerX = toBigInt(round(mul(center_re, zoom)));
+        const centerY = toBigInt(round(mul(center_im, zoom)));
+
+        // panel coodinates in pixel units
+        const x = pixelX - centerX;
+        const y = pixelY - centerY;
 
         // x, y can now be handled with low precision
         // these can be native precision numbers as it's pixels on screen
         // negative in y direction because pixel coordinates
         // increase downwards on the canvas
-        const left = Math.round(width / 2 + demote(x) * postZoom);
-        const top = Math.round(height / 2 - demote(y) * postZoom);
+        const left = Math.round(width / 2 + Number(x) * postZoom);
+        const top = Math.round(height / 2 - Number(y) * postZoom);
 
         return { left: left, top: top };
     }
@@ -107,6 +109,7 @@ class ModelClient {
 
         // reference counter to check for expired snaps
         this.setupReference = 0;
+        this.iterations = 0;
 
         // snaps of panels and updated snaps since last flush
         this.snaps = new Map();
@@ -146,8 +149,9 @@ class ModelClient {
         this.updates = new Map();
         this.flushFromBlank = true;
 
-        // update reference counter
+        // update reference counters
         this.setupReference += 1;
+        this.iterations = 0;
 
         // send to workers
         this.workers.forEach(worker => {
@@ -205,17 +209,21 @@ class ModelClient {
     }
 
     workerMessage(message) {
-        const { setupReference, snaps } = message.data;
+        const { setupReference, iterations, snaps } = message.data;
 
-        if(setupReference != this.setupReference) {
+        if (setupReference != this.setupReference) {
             console.debug("expired snaps received from worker");
             return;
         }
 
         for (const snap of snaps) {
-            this.updates.set(snap.key, snap);
-            this.snaps.set(snap.key, snap);
+            const key = `${snap.panelX} ${snap.panelY}`;
+            this.updates.set(key, snap);
+            this.snaps.set(key, snap);
         }
+
+        // diagnostic info
+        this.iterations = iterations;
     }
 
     /* get updates since last flush */

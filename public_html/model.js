@@ -92,8 +92,8 @@ class Point {
 // not optimised for speed
 function mbSample(c_re, c_im, iterations = 1000) {
   const point = new Point(
-    Arithmetic.Number(c_re),
-    Arithmetic.Number(c_im)
+    Arithmetic.N(c_re),
+    Arithmetic.N(c_im)
   );
 
   // runout of points
@@ -117,11 +117,13 @@ function mbSample(c_re, c_im, iterations = 1000) {
 // Object that holds a regular rectangular grid of Point objects
 class MandelbrotGrid {
   constructor(center_re, center_im, zoom, width, height) {
-    this.center_re = Arithmetic.Number(center_re);
-    this.center_im = Arithmetic.Number(center_im);
-    this.zoom = Arithmetic.Number(zoom);
+    this.center_re = center_re;
+    this.center_im = center_im;
+    this.zoom = zoom;
     this.width = width;
     this.height = height;
+    
+    // panel bitmap image
     this.image = null;
 
     // flat list of all points

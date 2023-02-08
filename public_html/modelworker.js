@@ -18,23 +18,17 @@ var currentPanels;
 
 // grid class representing a square of the set
 class Panel extends MandelbrotGrid {
-  constructor(key, panelX, panelY, zoom, length) {
+  constructor(panelX, panelY, zoom, length) {
     const { N, mul, div, add, sub } = Arithmetic;
 
-    const panelLengthComplexPlane = div(length, zoom);
-    const halfPanelLengthComplexPlane = div(panelLengthComplexPlane, 2);
-
-    // demote BigInt to arithmetic precision
-    const panelX_ = N(panelX);
-    const panelY_ = N(panelY);
-
-    // center of the panel in pixels
-    const pixel_re = add(mul(length, panelX_), halfPanelLengthComplexPlane);
-    const pixel_im = add(mul(length, panelY_), halfPanelLengthComplexPlane);
-
+    const lengthN = BigInt(length);
+    const pixelX = panelX * lengthN;
+    const pixelY = panelY * lengthN;
+    
     // center of the panel in complex coordinates
-    const center_re = div(pixel_re, zoom);
-    const center_im = div(pixel_im, zoom);
+    const halfPanelLengthInComplexPlane = div(div(length, zoom), 2);
+    const center_re = add(div(N(pixelX), zoom), halfPanelLengthInComplexPlane);
+    const center_im = add(div(N(pixelY), zoom), halfPanelLengthInComplexPlane);
 
     // set up grid
     super(center_re, center_im, zoom, length, length);
@@ -42,9 +36,8 @@ class Panel extends MandelbrotGrid {
 
     // snap template
     this.snapTemplate = {
-      key: key,
-      panelX: panelX.toString(),
-      panelY: panelY.toString(),
+      panelX: panelX,
+      panelY: panelY,
       length: length,
     }
   }
@@ -80,9 +73,10 @@ class Panels {
     // active panels that this worker is currently working on
     this.activePanels = [];
 
-    // limiters
+    // limiters and counter
     this.frameTime = 0;
     this.timeToIdle = 0;
+    this.iterations = 0;
   }
 
   /*
@@ -99,7 +93,7 @@ class Panels {
 
       // create new one
       if (!panel) {
-        panel = new Panel(key, panelX, panelY, this.zoom, this.panelLength);
+        panel = new Panel(panelX, panelY, this.zoom, this.panelLength);
         panel.initiate();
         this.panels.set(key, panel);
       }
@@ -110,47 +104,28 @@ class Panels {
 
   /* determine active panel coordinates around a center */
   getPanelsForView(center_re, center_im, width, height, step, offset) {
-    const { demote, mul, div, add, sub, floor, mod } = Arithmetic;
+    const { toBigInt, mul, div, add, sub, floor, mod } = Arithmetic;
     const { zoom, panelLength } = this;
 
-    // panel length on complex plane
-    const panelLengthComplexPlane = div(panelLength, zoom);
+    // center panel coordinates in units of panel lengths
+    const centerX = toBigInt(floor(mul(div(center_re, panelLength), zoom)));
+    const centerY = toBigInt(floor(mul(div(center_im, panelLength), zoom)));
 
-    // center in units of panel lengths
-    const center_pre = div(center_re, panelLengthComplexPlane);
-    const center_pim = div(center_im, panelLengthComplexPlane);
-
-    // total view box in units of panel lengths about origin divided by two
-    const halfWidthInPanels = div(div(width, panelLength), 2);
-    const halfHeightInPanels = div(div(height, panelLength), 2);
+    // width and height of the view in panels either side of the center
+    // rounding up means the view is always covered in worst case
+    const xPanels = BigInt(Math.ceil((width / panelLength + 1) / 2));
+    const yPanels = BigInt(Math.ceil((height / panelLength + 1) / 2));
 
     // viewbox lower bounds in units of panel lengths
-    const xMin = floor(sub(center_pre, halfWidthInPanels));
-    const yMin = floor(sub(center_pim, halfHeightInPanels));
+    const xMin = centerX - xPanels;
+    const yMin = centerY - yPanels;
+    const xMax = centerX + xPanels;
+    const yMax = centerY + yPanels;
 
-    // determine modulo offset of bounding panels
-    const offset0 = demote(mod(add(xMin, yMin), step));
-
-    // width and height of the view in panels
-    // rounding up and adding one means the view is covered in worst case
-    const widthInPanels = Math.ceil(width / panelLength) + 1;
-    const heightInPanels = Math.ceil(height / panelLength) + 1;
-
-    // generate keys - got to be careful to avoid infinite loop
-    // when rounding on huge numbers means add(xMin, i) == xMin
-    // when the precision has expired
     const out = [];
-
-    for (let j = 0; j < heightInPanels; j++) {
-      const panelY = add(yMin, j);
-
-      for (let i = 0; i < widthInPanels; i++) {
-
-        // multi worker striping
-        if ((offset0 + i + j - offset) % step)
-          continue;
-
-        const panelX = add(xMin, i);
+    for (let panelX = xMin; panelX <= xMax; panelX++) {
+      for (let panelY = yMin; panelY <= yMax; panelY++) {
+        if ((panelX + panelY - offset) % step) continue; // multi-worker striping
         out.push([panelX, panelY]);
       }
     }
@@ -161,6 +136,7 @@ class Panels {
   // iterate all current panels
   iterate() {
     for (const panel of this.activePanels) panel.iterate();
+    this.iterations += 1;
   }
 
   // post updates for visible panels
@@ -176,6 +152,7 @@ class Panels {
 
     postMessage({
       setupReference: this.setupReference,
+      iterations: this.iterations,
       snaps: snaps,
     }, snaps.map(s => s.bitmap).filter(s => s));
 
@@ -202,7 +179,7 @@ onmessage = function (e) {
       const N = Arithmetic.Number;
       currentPanels = new Panels(
         setupReference,
-        N(zoom),
+        Arithmetic.N(zoom),
         precision,
         panelLength
       );
@@ -219,18 +196,17 @@ onmessage = function (e) {
       }
 
       const { center_re, center_im, width, height, step, offset } = e.data;
-      const N = Arithmetic.Number;
 
       // get visible panel keys
       console.debug('setting center', center_re, center_im);
 
       const active = panels.getPanelsForView(
-        N(center_re),
-        N(center_im),
+        Arithmetic.N(center_re),
+        Arithmetic.N(center_im),
         width,
         height,
-        step,
-        offset
+        BigInt(step),
+        BigInt(offset)
       );
 
       // set visible panels for calculation
