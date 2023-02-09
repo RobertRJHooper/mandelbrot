@@ -4,11 +4,6 @@
 // under the global variable Artihmetic with the required precision
 // var Arithmetic = getArithmetic(15);
 
-// check if the point is in a known region of mandelbrot set using formula
-function mbByFormula(re, im) {
-  return Arithmetic.mbInMainCardiod(re, im) || Arithmetic.mbInPrimaryBulb(re, im);
-}
-
 /**
 * Converts an HSL color value to RGB. Conversion formula
 * adapted from http://en.wikipedia.org/wiki/HSL_color_space.
@@ -56,34 +51,47 @@ class Point {
   constructor(c_re, c_im) {
     this.c_re = c_re;
     this.c_im = c_im;
-    this.z_re = Arithmetic.ZERO;
-    this.z_im = Arithmetic.ZERO;
-    this.age = 0;
-    this.escapeAge = null;
 
     // we can know by formula that some values series remain bounded
-    this.boundedByFormula = mbByFormula(this.c_re, this.c_im);
+    this.boundedByFormula = Arithmetic.mbInMainCardiod(c_re, c_im) || Arithmetic.mbInPrimaryBulb(c_re, c_im);
 
     // flag whether the point escape is determined yet
     this.determined = this.boundedByFormula;
+    this.escapeAge = null;
+
+    // current iteration state
+    this.age = 0;
+    this.z_re = Arithmetic.ZERO;
+    this.z_re2 = Arithmetic.ZERO; // z_re squared
+    this.z_im = Arithmetic.ZERO;
+    this.z_im2 = Arithmetic.ZERO; // z_im squared
   }
 
   iterate() {
-    const { z_re, z_im, c_re, c_im } = this;
-    const {mul, add, sub, TWO, mbEscaped} = Arithmetic;
+    const { mul, add, sub, TWO, FOUR, gt } = Arithmetic;
+    const { c_re, c_im, z_re, z_re2, z_im, z_im2 } = this;
 
-    const z_re2 = mul(z_re, z_re);
-    const z_im2 = mul(z_im, z_im);
+    // next iteration of z
     const re = add(sub(z_re2, z_im2), c_re);
+    const re2 = mul(re, re);
     const im = add(mul(mul(z_re, z_im), TWO), c_im);
+    const im2 = mul(im, im);
 
+    // save state
     this.z_re = re;
+    this.z_re2 = re2;
     this.z_im = im;
+    this.z_im2 = im2;
     this.age += 1;
 
-    if (mbEscaped(re, im) && !this.determined) {
-      this.escapeAge = this.age;
-      this.determined = true;
+    // check for escape (with cheap shortcuts for speed)
+    if(gt(re2, TWO) || gt(im2, TWO)) {
+      const escaped = gt(re2, FOUR) || gt(im2, FOUR) || gt(add(im2, re2), FOUR);
+
+      if(escaped && !this.determined) {
+        this.escapeAge = this.age;
+        this.determined = true;
+      }
     }
   }
 }
@@ -122,7 +130,7 @@ class MandelbrotGrid {
     this.zoom = zoom;
     this.width = width;
     this.height = height;
-    
+
     // panel bitmap image
     this.image = null;
 
@@ -140,7 +148,7 @@ class MandelbrotGrid {
 
   initiatePoints() {
     const { center_re, center_im, zoom, width, height } = this;
-    const {ONE, TWO, mul, div, add, sub} = Arithmetic;
+    const { ONE, TWO, mul, div, add, sub } = Arithmetic;
 
     // factor to convert from pixels to imaginary coorindate
     // divided by two so we can use integers in dp below

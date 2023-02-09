@@ -52,20 +52,6 @@ function DecimalArithmetic(precision) {
     NEG_FOUR: new N(-4),
   };
 
-  // mandelbrot escape test:
-  // check if a point has escaped and will always diverge with further iterations
-  A.mbEscaped = function (re, im) {
-    if (re.lt(A.SQRT2) && re.gt(A.NEG_SQRT2) && im.lt(A.SQRT2) && im.gt(A.NEG_SQRT2))
-      return false;
-
-    if (re.lt(A.NEG_TWO) || re.gt(A.TWO) || im.lt(A.NEG_TWO) || im.gt(A.TWO))
-      return true;
-
-    const im2 = im.mul(im);
-    const re2 = re.mul(re);
-    return im2.add(re2).gt(A.FOUR);
-  };
-
   // smallest bounding rectangle for the main cardiod
   // left, right, bottom, top
   A.CARIDOID_EXC = [new N(-0.76), new N(0.38), new N(-0.66), new N(+0.66)];
@@ -183,22 +169,6 @@ function NativeArithmetic() {
     NEG_TWO: -2,
     FOUR: 4,
     NEG_FOUR: -4,
-  };
-
-  // mandelbrot escape test:
-  // check if a point has escaped and will always diverge with further iterations
-  A.mbEscaped = function (re, im) {
-    const sqrt2 = A.SQRT2;
-
-    if (re < sqrt2 && re > -sqrt2 && im < sqrt2 && im.gt > -sqrt2)
-      return false;
-
-    if (re < -2 || re > 2 || im < -2 || im > 2)
-      return true;
-
-    const im2 = im * im;
-    const re2 = re * re;
-    return im2 + re2 > 4;
   };
 
   // smallest bounding rectangle for the main cardiod

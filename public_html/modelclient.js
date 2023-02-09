@@ -1,17 +1,17 @@
 "use strict";
 
 const getModelGeometry = _.memoize(
-    (center, zoom, precision) => new ModelGeometry(center, zoom, precision)
+    (re, im, zoom, precision) => new ModelGeometry(re, im, zoom, precision)
 );
 
 class ModelGeometry {
-    constructor(center, zoom, precision) {
+    constructor(re, im, zoom, precision) {
         this.A = getArithmetic(precision);
 
         // parse to number objects
         const N = this.A.N;
-        this.center_re = N(center.re);
-        this.center_im = N(center.im);
+        this.center_re = N(re);
+        this.center_im = N(im);
         this.zoom = N(zoom);
     }
 
@@ -58,7 +58,7 @@ class ModelGeometry {
     /* return the new zoom value give a further magnification factor */
     magnify(factor) {
         const { mul, round } = this.A;
-        return round(mul(this.zoom, factor));
+        return mul(this.zoom, factor);
     }
 
     /* get canvas coordinates from panel coordinates */
@@ -166,7 +166,7 @@ class ModelClient {
     }
 
     /* set the center in the workers */
-    setView(center, width, height) {
+    setView(re, im, width, height) {
         if (!width || !height) {
             console.debug("trivial view, nothing to do");
             return;
@@ -185,8 +185,8 @@ class ModelClient {
         this.workers.forEach((worker, workerIndex) => {
             worker.postMessage({
                 command: 'view',
-                center_re: center.re.toString(),
-                center_im: center.im.toString(),
+                center_re: re.toString(),
+                center_im: im.toString(),
                 width: width,
                 height: height,
                 step: this.workers.length,

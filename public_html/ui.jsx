@@ -5,83 +5,80 @@ function pullURLParams() {
     const url = new URL(window.location);
     const searchParams = url.searchParams;
 
-    // retrieve from URL
-    const re = searchParams.get('re');
-    const im = searchParams.get('im');
-    const zoom = searchParams.get('zoom');
-    const precision = searchParams.get('precision');
+    // validor of decimal numbers in string format
+    function isDefined(x) { return typeof (x) != 'undefined' && x != null; }
+    function isValidNumber(x) { return /^[-+]?\d+\.?\d*$/.test(x); }
 
-    // validate all as floating point numbers
-    const validator = /^[-+]?\d+\.?\d*$/;
+    // retreive and validate parameters that are specified
+    const params = {};
 
-    for (const value of [re, im, zoom, precision]) {
-        if (typeof (value) == 'undefined' || value === null)
-            return;
+    for (const name of ['re', 'im', 'zoom', 'precision']) {
+        const value = searchParams.get(name);
 
-        if (!validator.test(value)) {
-            console.error('bad parameter in URL', value);
+        if (isDefined(value) && !isValidNumber(value)) {
+            console.error('bad parameter', name, value);
             return;
         }
+
+        params[name] = value;
     }
 
     // check zoom is positive
-    if (zoom.startsWith('-')) {
+    if (isDefined(params.zoom) && params.zoom.startsWith('-')) {
         console.error('zoom must be positive');
         return;
     }
 
     // check precision is positive
-    if (precision.startsWith('-')) {
+    if (isDefined(params.precision) && params.precision.startsWith('-')) {
         console.error('precision must be positive');
         return;
     }
 
-    return {
-        center: { re: re, im: im },
-        zoom: zoom,
-        precision: Number(precision),
-    };
+    // parse precision to a number
+    if (isDefined(params.precision))
+        params.precision = Number(params.precision);
+
+    return params;
 }
 
 /* push the view to the URL if it's not already there */
-function pushURLParams(center, zoom, precision) {
+function pushURLParams(re, im, zoom, precision) {
     const url = new URL(window.location);
     const searchParams = url.searchParams;
-    searchParams.set('re', center.re);
-    searchParams.set('im', center.im);
+    searchParams.set('re', re);
+    searchParams.set('im', im);
     searchParams.set('zoom', zoom);
     searchParams.set('precision', precision);
     window.history.pushState({}, '', url);
 }
 
 class App extends React.Component {
-    static defaultViewState = {
-
-        // high precision numbers are stored as strings in the UI
-        center: { re: "0", im: "0" },
+    static homeViewState = {
+        // complex coordinates of the center of the view 
+        re: "0",
+        im: "0",
 
         // zoom is the number of pixels per unit in the imaginary plane
-        zoom: "200",
-
-        // number of significant figures that high precision number have
-        // for low values, regular Javascript floats are used
-        // for high values, custom (slow) Decimal.js objects are used
-        precision: 15,
-
-        // pinch zoom modifier to the magnification
-        // This is reset and baked into center
-        // at the end of the pinch
-        postZoom: 1,
+        zoom: "180",
     };
 
     constructor(props) {
         super(props);
 
         this.state = {
-            ...App.defaultViewState,
+            ...App.homeViewState,
+
+            // number of significant figures that high precision number have
+            // for low values: regular Javascript floats are used.
+            // for high values: custom (slow) Decimal.js objects are used
+            precision: 15,
+
+            // get specified parameters from URL
+            // these will cacade on top of defaults
             ...pullURLParams() || {},
 
-            // pixel dimensions of the canvas display
+            // pixel dimensions of the display element
             width: 0,
             height: 0,
 
@@ -90,6 +87,10 @@ class App extends React.Component {
             // or 
             // 'box-select' - draw a box and zoom into that box on release
             mouseMode: 'pan',
+
+            // zoom modifier so the image scales with a pinch operation
+            // This is reset and baked into center at the end of a pinch
+            postZoom: 1,
 
             // single (complex) point runout sample display
             sample: null,
@@ -118,6 +119,7 @@ class App extends React.Component {
         this.onZoomComplete = this.onZoomComplete.bind(this);
 
         // pushing zoom back to URL on updates with debounce throttling
+        this.pullStateFromURL = this.pullStateFromURL.bind(this);
         this.pushStateToURLDebounced = _.debounce(this.pushStateToURL.bind(this), 1000);
     }
 
@@ -137,18 +139,18 @@ class App extends React.Component {
     }
 
     pushStateToURL() {
-        const { center, zoom, precision } = this.state;
+        const { re, im, zoom, precision } = this.state;
         const current = pullURLParams();
 
         // look for changes
         const changed = !current
-            || current.center.re != center.re
-            || current.center.im != center.im
+            || current.re != re
+            || current.im != im
             || current.zoom != zoom
             || current.precision != precision;
 
         // update URL on change
-        if (changed) pushURLParams(center, zoom, precision);
+        if (changed) pushURLParams(re, im, zoom, precision);
     }
 
     // outer render before dimensions are known
@@ -164,20 +166,20 @@ class App extends React.Component {
 
     // inner render when we know the container dimensions
     renderContent() {
-        const { center, zoom, precision, postZoom, width, height } = this.state;
+        const { re, im, zoom, precision, postZoom, width, height } = this.state;
 
         return (
             <div>
                 <MandelbrotSet
-                    center={center} zoom={zoom} precision={precision}
+                    re={re} im={im} zoom={zoom} precision={precision}
                     postZoom={postZoom}
-                    canvasWidth={width}
-                    canvasHeight={height}
+                    width={width}
+                    height={height}
                 />
 
                 {this.state.sampleVisible && (postZoom == 1) &&
                     <SampleDisplay
-                        center={center} zoom={zoom} precision={precision}
+                        re={re} im={im} zoom={zoom} precision={precision}
                         width={width}
                         height={height}
                         sample={this.state.sample}
@@ -194,7 +196,7 @@ class App extends React.Component {
                 />
 
                 <Navbar
-                    onReset={() => this.setState({ ...App.defaultViewState, infoModalVisible: false })}
+                    onReset={() => this.setState({ ...App.homeViewState, infoModalVisible: false })}
                     mouseMode={this.state.mouseMode}
                     onSelectBox={() => this.setState((state) => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
                     sampleVisible={this.state.sampleVisible}
@@ -217,19 +219,22 @@ class App extends React.Component {
         this.pullContainerDimensions();
 
         // monitor URL for changes to feed into state
-        window.addEventListener('popstate', this.pushStateToURL);
+        window.addEventListener('popstate', this.pullStateFromURL);
     }
 
     componentWillUnmount() {
         this.resizeObserver.disconnect();
-        window.removeEventListener('popstate', this.pushStateToURL);
+        window.removeEventListener('popstate', this.pullStateFromURL);
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const viewChanged = prevState.x != this.state.x
-            || prevState.y != this.state.y
-            || prevState.zoom != this.state.zoom
-            || prevState.precision != this.state.precision;
+        const { re, im, zoom, precision } = this.state;
+
+        const viewChanged = 0
+            || prevState.re != re
+            || prevState.im != im
+            || prevState.zoom != zoom
+            || prevState.precision != precision;
 
         if (viewChanged) this.pushStateToURLDebounced();
     }
@@ -237,10 +242,9 @@ class App extends React.Component {
     onPointHover(x, y) {
         if (this.state.sampleVisible) {
             this.setState((state, props) => {
-                const { center, zoom, precision, width, height } = state;
-                const geo = getModelGeometry(center, zoom, precision);
+                const { re, im, zoom, precision, width, height } = state;
+                const geo = getModelGeometry(re, im, zoom, precision);
                 const point = geo.rectToImaginary(width, height, x, y);
-                return {};
                 return { sample: mbSample(point.re, point.im) };
             });
         }
@@ -248,8 +252,8 @@ class App extends React.Component {
 
     onPan(dx, dy) {
         this.setState((state, props) => {
-            const { center, zoom, precision, width, height } = state;
-            const geo = getModelGeometry(center, zoom, precision);
+            const { re, im, zoom, precision, width, height } = state;
+            const geo = getModelGeometry(re, im, zoom, precision);
 
             // new center
             const newCenter = geo.rectToImaginary(
@@ -259,7 +263,7 @@ class App extends React.Component {
                 height / 2 - dy
             );
 
-            return { center: newCenter };
+            return { re: newCenter.re, im: newCenter.im };
         });
     }
 
@@ -270,16 +274,16 @@ class App extends React.Component {
     /* bake postZoom into base zoom */
     onZoomComplete() {
         this.setState((state, props) => {
-            const { center, zoom, precision, postZoom } = state;
-            const geo = getModelGeometry(center, zoom, precision);
+            const { re, im, zoom, precision } = state;
+            const geo = getModelGeometry(re, im, zoom, precision);
             return { zoom: geo.magnify(postZoom), postZoom: 1 };
         });
     }
 
     onBoxSelect(box) {
         this.setState((state, props) => {
-            const { center, zoom, precision, width, height } = state;
-            const geo = getModelGeometry(center, zoom, precision);
+            const { re, im, zoom, precision, width, height } = state;
+            const geo = getModelGeometry(re, im, zoom, precision);
 
             const newCenter = geo.rectToImaginary(
                 width,
@@ -290,12 +294,16 @@ class App extends React.Component {
 
             // zoom so the box is fully shown as big as possible
             const fitWidth = box.width / width > box.height / height;
-            const factor = fitWidth ? width / box.width : state.height / box.height;
+            const factor = fitWidth ? width / box.width : height / box.height;
             const newZoom = geo.magnify(factor);
 
-            console.debug("sub box selected with center", newCenter, "magnifying x", factor, 'to zoom level', newZoom);
+            console.debug("sub box selected with center", newCenter.re, newCenter.im);
+            console.debug("magnifying x", factor);
+            console.debug("zoom level", newZoom);
+
             return {
-                center: newCenter,
+                re: newCenter.re,
+                im: newCenter.im,
                 zoom: newZoom,
                 postZoom: 1,
                 mouseMode: 'pan',
@@ -308,8 +316,8 @@ class MandelbrotSet extends React.Component {
     static framePeriod = 100; // frame throlling in ms
 
     static defaultProps = {
-        canvasWidth: 400,
-        canvasHeight: 400,
+        width: 400,
+        height: 400,
     }
 
     constructor(props) {
@@ -328,16 +336,16 @@ class MandelbrotSet extends React.Component {
         return (
             <canvas
                 ref={this.canvas}
-                width={this.props.canvasWidth}
-                height={this.props.canvasHeight}
+                width={this.props.width}
+                height={this.props.height}
                 className="mandelbrotset">
             </canvas>
         );
     }
 
     drawSnaps(snaps, update) {
-        const { center, zoom, precision, canvasWidth, canvasHeight, postZoom } = this.props;
-        const geo = getModelGeometry(center, zoom, precision);
+        const { re, im, zoom, precision, width, height, postZoom } = this.props;
+        const geo = getModelGeometry(re, im, zoom, precision);
 
         // main drawing context
         const context = this.canvas.current.getContext('2d', { alpha: false });
@@ -345,29 +353,29 @@ class MandelbrotSet extends React.Component {
         // clear canvas if it's not an update
         if (!update) {
             context.fillStyle = "black";
-            context.fillRect(0, 0, canvasWidth, canvasHeight);
+            context.fillRect(0, 0, width, height);
         }
 
         // check the snap has at least one pixel on canvas and paint
         for (const snap of snaps) {
             const { panelX, panelY, length, bitmap } = snap;
-            const { top, left } = geo.getPixelCoordinates(panelX, panelY, length, canvasWidth, canvasHeight, postZoom);
+            const { top, left } = geo.getPixelCoordinates(panelX, panelY, length, width, height, postZoom);
             const lengthWithPostZoom = length * postZoom;
 
             const visible = (left + lengthWithPostZoom >= 0)
-                && (left < canvasWidth)
+                && (left < width)
                 && (top + lengthWithPostZoom >= 0)
-                && (top < canvasHeight);
+                && (top < height);
 
-                /*
-                console.log('snap', snap);
-                console.log('top', top);
-                console.log('left', left);
-                console.log('lengthWithPostZoom', lengthWithPostZoom);
-                console.log('visible', visible);
-                */
+            /*
+            console.log('snap', snap);
+            console.log('top', top);
+            console.log('left', left);
+            console.log('lengthWithPostZoom', lengthWithPostZoom);
+            console.log('visible', visible);
+            */
 
-                if (visible) context.drawImage(bitmap, left, top, lengthWithPostZoom, lengthWithPostZoom);
+            if (visible) context.drawImage(bitmap, left, top, lengthWithPostZoom, lengthWithPostZoom);
         }
     }
 
@@ -390,30 +398,30 @@ class MandelbrotSet extends React.Component {
         window.requestAnimationFrame(this.animationFrame);
 
         // start model
-        const { zoom, precision, center, canvasWidth, canvasHeight } = this.props;
+        const { zoom, precision, re, im, width, height } = this.props;
         this.model.setup(zoom, precision);
-        this.model.setView(center, canvasWidth, canvasHeight);
+        this.model.setView(re, im, width, height);
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { zoom, precision, postZoom, center, canvasWidth, canvasHeight } = this.props;
+        const { re, im, zoom, precision, postZoom, width, height } = this.props;
 
         const setupUpdate = zoom != prevProps.zoom || precision != prevProps.precision;
         if (setupUpdate) {
-            console.debug('update to zoom level and/or precision', zoom, precision);
+            // console.debug('update to zoom level and/or precision', zoom, precision);
             this.model.setup(zoom, precision);
         }
 
         const viewUpdate = setupUpdate
-            || center.re != prevProps.center.re
-            || center.im != prevProps.center.im
-            || canvasWidth != prevProps.canvasWidth
-            || canvasHeight != prevProps.canvasHeight
+            || re != prevProps.re
+            || im != prevProps.im
+            || width != prevProps.width
+            || height != prevProps.height
             || postZoom != prevProps.postZoom;
 
         if (viewUpdate) {
-            console.debug('update to view', center.re, center.im, canvasWidth, canvasHeight, postZoom);
-            this.model.setView(center, canvasWidth, canvasHeight, postZoom);
+            // console.debug('update to view', re, im, width, height, postZoom);
+            this.model.setView(re, im, width, height, postZoom);
         }
     }
 
@@ -439,7 +447,7 @@ class SampleDisplay extends React.Component {
     }
 
     draw() {
-        const { center, zoom, width, height, sample } = this.props;
+        const { re, im, zoom, width, height, sample } = this.props;
         const canvas = this.canvas.current;
 
         // no canvas to draw on
@@ -457,7 +465,7 @@ class SampleDisplay extends React.Component {
         }
 
         // convert coordinates to rectangle
-        const points = sample.zi.map(z => imaginarytoRect(center, zoom, width, height, complex(z[0], z[1])));
+        const points = sample.zi.map(z => imaginarytoRect(re, im, zoom, width, height, complex(z[0], z[1])));
 
         // draw line between points
         context.beginPath();
@@ -479,19 +487,17 @@ class SampleDisplay extends React.Component {
     }
 
     render() {
-        const { center, zoom, width, height, sample } = this.props;
+        const { re, im, zoom, width, height, sample } = this.props;
 
         // no sample supplied
-        if (!sample) {
-            return;
-        }
+        if (!sample) return;
 
         // get initial point in the sample after the origin        
         const [point_re, point_im] = sample.zi[1];
         const point = complex(point_re, point_im);
 
         // put the tooptip at the initial point
-        const pointPosition = imaginarytoRect(center, zoom, width, height, point);
+        const pointPosition = imaginarytoRect(re, im, zoom, width, height, point);
         const escape = Number.isFinite(sample.escapeAge);
 
         return (
