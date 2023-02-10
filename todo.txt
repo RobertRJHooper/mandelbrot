@@ -8,6 +8,7 @@ add iterations counter on main display
 allow canvas width and height to be specified or set to auto
 reset should not update the precision
 add tooltips to buttons
+look at panning - is it debounced enough in the workers
 
 Features to make:
 complete sampler draw

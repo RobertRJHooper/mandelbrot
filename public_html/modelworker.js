@@ -13,8 +13,33 @@ const frameThrottlePeriod = 250;
 // current Arithmetic system in use (depending on precision required)
 var Arithmetic;
 
-// current frame controller
-var currentPanels;
+// current running work
+const current = {};
+
+// incoming message handler
+onmessage = function (e) {
+  switch (e.data.command) {
+    case 'setup': {
+      current.setup = e.data;
+      current.dirtySetup = true;
+      break;
+    }
+
+    case 'view': {
+      current.view = e.data;
+      current.dirtyView = true;
+      break;
+    }
+
+    case 'limit': {
+      current.timeToIdle = e.data.timeToIdle;
+      break;
+    }
+
+    default:
+      throw new Error(`unknown worker command "${e.data.command}" received`);
+  }
+}
 
 // grid class representing a square of the set
 class Panel extends MandelbrotGrid {
@@ -24,7 +49,7 @@ class Panel extends MandelbrotGrid {
     const lengthN = BigInt(length);
     const pixelX = panelX * lengthN;
     const pixelY = panelY * lengthN;
-    
+
     // center of the panel in complex coordinates
     const halfPanelLengthInComplexPlane = div(div(length, zoom), 2);
     const center_re = add(div(N(pixelX), zoom), halfPanelLengthInComplexPlane);
@@ -32,7 +57,6 @@ class Panel extends MandelbrotGrid {
 
     // set up grid
     super(center_re, center_im, zoom, length, length);
-    this.dirty = false;
 
     // snap template
     this.snapTemplate = {
@@ -40,9 +64,25 @@ class Panel extends MandelbrotGrid {
       panelY: panelY,
       length: length,
     }
+
+    // when the panel image has been updated and not posted yet
+    this.dirty = false;
   }
 
-  // create a snapshot and clear dirty flag
+  initiate() {
+    super.initiate();
+    this.dirty = this.live.length != this.width * this.height;
+  }
+
+  iterate() {
+    const liveCount = this.live.length;
+    super.iterate();
+
+    // dirty if a point has been determined and stops being live
+    if (liveCount != this.live.length) this.dirty = true;
+  }
+
+  // create a snapshot bitmap. clears dirty flag
   async snap() {
     const bitmap = await createImageBitmap(this.image);
     this.dirty = false;
@@ -53,9 +93,6 @@ class Panel extends MandelbrotGrid {
     };
   }
 
-  iterate() {
-    if (super.iterate()) this.dirty = true;
-  }
 }
 
 class Panels {
@@ -73,9 +110,7 @@ class Panels {
     // active panels that this worker is currently working on
     this.activePanels = [];
 
-    // limiters and counter
-    this.frameTime = 0;
-    this.timeToIdle = 0;
+    // counter
     this.iterations = 0;
   }
 
@@ -161,101 +196,87 @@ class Panels {
   }
 }
 
-// incoming message handler
-onmessage = function (e) {
-  switch (e.data.command) {
-    case 'setup': {
-      const { setupReference, zoom, panelLength, precision } = e.data;
-      console.debug('setting up with reference', setupReference);
-
-      // first setup the arithmetic structure used by worker
-      console.debug('setting arithmetic precision', precision);
-      Arithmetic = getArithmetic(precision);
-
-      // set up panels controoler
-      console.debug('setting zoom', zoom)
-      console.debug('setting panelLength', panelLength);
-
-      const N = Arithmetic.Number;
-      currentPanels = new Panels(
-        setupReference,
-        Arithmetic.N(zoom),
-        precision,
-        panelLength
-      );
-
-      break;
-    }
-
-    case 'view': {
-      const panels = currentPanels;
-
-      if (!panels) {
-        console.warn('not setup with setting view');
-        break;
-      }
-
-      const { center_re, center_im, width, height, step, offset } = e.data;
-
-      // get visible panel keys
-      console.debug('setting center', center_re, center_im);
-
-      const active = panels.getPanelsForView(
-        Arithmetic.N(center_re),
-        Arithmetic.N(center_im),
-        width,
-        height,
-        BigInt(step),
-        BigInt(offset)
-      );
-
-      // set visible panels for calculation
-      console.debug('setting active panels numbering', active.length);
-      panels.setActivePanels(active);
-      break;
-    }
-
-    case 'limit': {
-      const panels = currentPanels;
-
-      if (!panels) {
-        console.warn('limit command ignored while worker not setup')
-        break;
-      }
-
-      // update time to run iterations to
-      panels.timeToIdle = e.data.timeToIdle;
-      break;
-    }
-
-    default:
-      throw new Error(`unknown worker command "${e.data.command}" received`);
-  }
-}
-
 // work loop. returns true iff some work was done.
 async function loop() {
-  const panels = currentPanels;
 
-  // nothing to do
-  if (!panels) return false;
+  // setup the worker from the global configuation
+  if (current.dirtySetup) {
+    current.dirtySetup = false;
 
-  // work throttle
+    const { setupReference, zoom, panelLength, precision } = current.setup;
+    console.debug('setting up with reference', setupReference);
+
+    // first setup the arithmetic structure used by worker
+    console.debug('setting arithmetic precision', precision);
+    Arithmetic = getArithmetic(precision);
+
+    // set up panels controller
+    console.debug('setting zoom', zoom)
+    console.debug('setting panelLength', panelLength);
+
+    current.panels = new Panels(
+      setupReference,
+      Arithmetic.N(zoom),
+      precision,
+      panelLength
+    );
+
+    return true;
+  }
+
+  // nothing to do if nothing is set up
+  if (!current.panels)
+    return false;
+
+  // setup view
+  if (current.dirtyView) {
+    current.dirtyView = false;
+
+    const panels = current.panels;
+    if (!panels) {
+      console.warn('not setup with setting view');
+      return true;
+    }
+
+    const { center_re, center_im, width, height, step, offset } = current.view;
+    console.debug('setting center', center_re, center_im);
+
+    const active = panels.getPanelsForView(
+      Arithmetic.N(center_re),
+      Arithmetic.N(center_im),
+      width,
+      height,
+      BigInt(step),
+      BigInt(offset)
+    );
+
+    // set visible panels for calculation
+    console.debug('setting active panels numbering', active.length);
+    panels.setActivePanels(active);
+
+    // make sure first issue of panels can go without pause
+    current.frameTime = 0;
+    return true;
+  }
+
+  // don't do any work if the time limit has been reached
   const timestamp = Date.now();
-  if (panels.timeToIdle < timestamp) return false;
 
-  // post a frame of panels to the master
-  if (timestamp > panels.frameTime + frameThrottlePeriod) {
-    if (await panels.post(timestamp)) {
-      panels.frameTime = timestamp;
+  if (current.timeToIdle < timestamp)
+    return false;
+
+  // post dirty panels to the master
+  if (timestamp > current.frameTime + frameThrottlePeriod) {
+    const somethingSent = await current.panels.post(timestamp);
+
+    if (somethingSent) {
+      current.frameTime = timestamp;
       return true;
     }
   }
 
   // iterate points in each panel
-  //console.time('iterate');
-  panels.iterate();
-  //console.timeEnd('iterate');
+  current.panels.iterate();
   return true;
 }
 

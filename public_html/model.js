@@ -49,22 +49,46 @@ const ageToRGB = _.range(ageToRGBCycleLength).map(i =>
 
 class Point {
   constructor(c_re, c_im) {
+    const { mul } = Arithmetic;
+
     this.c_re = c_re;
     this.c_im = c_im;
 
-    // we can know by formula that some values series remain bounded
-    this.boundedByFormula = Arithmetic.mbInMainCardiod(c_re, c_im) || Arithmetic.mbInPrimaryBulb(c_re, c_im);
+    // initial iteration state
+    this.age = 1;
+    this.z_re = c_re;
+    this.z_re2 = mul(c_re, c_re); // z_re squared
+    this.z_im = c_im;
+    this.z_im2 = mul(c_im, c_im); // z_im squared
 
-    // flag whether the point escape is determined yet
-    this.determined = this.boundedByFormula;
-    this.escapeAge = null;
+    // initial escape calculation
+    if (this.escaped()) {
+      this.determined = true;
+      this.escapeAge = this.age;
+    } else {
+      this.determined = false;
+      this.escapeAge = null;
+    }
+  }
 
-    // current iteration state
-    this.age = 0;
-    this.z_re = Arithmetic.ZERO;
-    this.z_re2 = Arithmetic.ZERO; // z_re squared
-    this.z_im = Arithmetic.ZERO;
-    this.z_im2 = Arithmetic.ZERO; // z_im squared
+  // check for escape (with short-circuits for speed)
+  // this is when z is outside the disk with radius 2 about origin
+  escaped() {
+    const { add, gt, TWO, FOUR } = Arithmetic;
+    const { z_re2, z_im2 } = this;
+
+    // see if the point is outside a square of length sqrt(2)
+    // if not then the point has not escaped
+    const reFar = gt(z_re2, TWO);
+    const imFar = gt(z_im2, TWO);
+    if (!reFar && !imFar) return false;
+
+    // check if one dimension is enought to determine escape
+    if (reFar && gt(z_re2, FOUR)) return true;
+    if (imFar && gt(z_im2, FOUR)) return true;
+
+    // full disc calculation for the remaining region
+    return gt(add(z_im2, z_re2), FOUR);
   }
 
   iterate() {
@@ -84,15 +108,19 @@ class Point {
     this.z_im2 = im2;
     this.age += 1;
 
-    // check for escape (with cheap shortcuts for speed)
-    if(gt(re2, TWO) || gt(im2, TWO)) {
-      const escaped = gt(re2, FOUR) || gt(im2, FOUR) || gt(add(im2, re2), FOUR);
-
-      if(escaped && !this.determined) {
-        this.escapeAge = this.age;
-        this.determined = true;
-      }
+    // check for escape
+    if (this.escaped()) {
+      this.determined = true;
+      this.escapeAge = this.age;
     }
+  }
+}
+
+/* static bounded point used when boundedness is determined by formula */
+class BoundedPoint {
+  constructor() {
+    this.determined = true;
+    this.escapeAge = null;
   }
 }
 
@@ -124,7 +152,7 @@ function mbSample(c_re, c_im, iterations = 1000) {
 
 // Object that holds a regular rectangular grid of Point objects
 class MandelbrotGrid {
-  constructor(center_re, center_im, zoom, width, height) {
+  constructor(center_re, center_im, zoom, width, height, retain = false) {
     this.center_re = center_re;
     this.center_im = center_im;
     this.zoom = zoom;
@@ -135,7 +163,11 @@ class MandelbrotGrid {
     this.image = null;
 
     // flat list of all points
+    // this is available when 'retain' is set
     this.points = null;
+
+    // flag to keep points after they have been painted
+    this.retain = retain;
 
     // points where it is not yet determined whether the
     // point is in the mandelbrot set or not
@@ -150,24 +182,27 @@ class MandelbrotGrid {
     const { center_re, center_im, zoom, width, height } = this;
     const { ONE, TWO, mul, div, add, sub } = Arithmetic;
 
-    // factor to convert from pixels to imaginary coorindate
-    // divided by two so we can use integers in dp below
-    const f = div(div(ONE, zoom), TWO);
+    // length in the imaginary plane per pixel width
+    // divided by two so we can use integers below and
+    // avoid precision differences
+    const pixelLength = div(div(ONE, zoom), TWO);
 
     // get real points for the grid
-    const re = []
+    const grid_re = [];
+
     for (let i = 0; i < width; i++) {
-      const dp = 2 * i - (width - 1);
-      const x = add(center_re, mul(f, dp));
-      re.push(x);
+      const pixelOffset = 2 * i - width + 1;
+      const x = add(center_re, mul(pixelLength, pixelOffset));
+      grid_re.push(x);
     }
 
     // get imaginary points for the grid
-    const im = [];
+    const grid_im = [];
+
     for (let i = 0; i < height; i++) {
-      const dp = 2 * i - (height - 1);
-      const x = sub(center_im, mul(f, dp));
-      im.push(x);
+      const pixelOffset = 2 * i - height + 1;
+      const x = sub(center_im, mul(pixelLength, pixelOffset));
+      grid_im.push(x);
     }
 
     /*
@@ -176,21 +211,35 @@ class MandelbrotGrid {
     console.log('re', re);
     */
 
-    // get points in the grid
-    const points = [];
-    for (let j = 0; j < height; j++) {
-      const c_im = im[j];
+    // points lists
+    const live = [], determined = [];
 
+    for (let j = 0; j < height; j++) {
       for (let i = 0; i < width; i++) {
-        const c_re = re[i];
-        const point = new Point(c_re, c_im);
+        const c_im = grid_im[j];
+        const c_re = grid_re[i];
+
+        // we can know by formula that some values remain bounded
+        const boundedByFormula = Arithmetic.mbInMainCardiod(c_re, c_im)
+          || Arithmetic.mbInPrimaryBulb(c_re, c_im);
+
+        // status storage for this point
+        const point = boundedByFormula ? new BoundedPoint() : new Point(c_re, c_im);
+
+        // attach index to point for reference while drawing
         point.idx = j * width + i;
-        points.push(point);
+
+        // add to list
+        (point.determined ? determined : live).push(point);
       }
     }
 
-    this.points = points;
-    this.live = points;
+    // paint initially determined points
+    this.paint(determined);
+
+    // save points references
+    if (this.retain) this.points = [...live, ...determined];
+    this.live = live;
   }
 
   initiate() {
@@ -198,14 +247,22 @@ class MandelbrotGrid {
     this.initiatePoints();
   }
 
-  // iterals all live points and returns true iff the image changed
+  // iterate live points and paint ones that become determined
   iterate() {
     const [determined, live] = _.partition(this.live, p => (p.iterate() || p.determined));
 
-    // colour newly determined points
+    // paint determined points to image
+    this.paint(determined);
+
+    // update live list
+    this.live = live;
+  }
+
+  /* paint determined points to the image */
+  paint(points) {
     const imageData = this.image.data;
 
-    determined.forEach((point) => {
+    points.forEach((point) => {
       const i = point.idx * 4;
 
       if (point.escapeAge !== null) {
@@ -214,23 +271,14 @@ class MandelbrotGrid {
         imageData[i + 1] = rgb[1];
         imageData[i + 2] = rgb[2];
         imageData[i + 3] = 255;
-      } else if (point.boundedByFormula) {
+      } else if (point.determined) {
+        // points determined by formula rather than iteration
         imageData[i + 0] = 255;
         imageData[i + 1] = 0;
         imageData[i + 2] = 255;
         imageData[i + 3] = 255;
-      } else {
-        imageData[i + 0] = 0;
-        imageData[i + 1] = 0;
-        imageData[i + 2] = 0;
-        imageData[i + 3] = 255;
       }
     });
 
-    // update live list
-    this.live = live;
-
-    // return true iff pixels were updated
-    return Boolean(determined.length);
   }
 }

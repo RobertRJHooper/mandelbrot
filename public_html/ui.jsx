@@ -15,7 +15,10 @@ function pullURLParams() {
     for (const name of ['re', 'im', 'zoom', 'precision']) {
         const value = searchParams.get(name);
 
-        if (isDefined(value) && !isValidNumber(value)) {
+        if (!isDefined(value))
+            continue;
+
+        if (!isValidNumber(value)) {
             console.error('bad parameter', name, value);
             return;
         }
@@ -327,7 +330,6 @@ class MandelbrotSet extends React.Component {
         // drawing canvas and loop
         this.canvas = React.createRef();
         this.running = false;
-        this.clear = false; // flag to clear canvas before next update
         this.animationFrame = this.animationFrame.bind(this);
         this.lastFrameTime = null;
     }
@@ -393,20 +395,23 @@ class MandelbrotSet extends React.Component {
     }
 
     componentDidMount() {
-        this.model.initiate();
-        this.running = true;
-        window.requestAnimationFrame(this.animationFrame);
+        const { zoom, precision, re, im, width, height } = this.props;
 
         // start model
-        const { zoom, precision, re, im, width, height } = this.props;
+        this.model.initiate();
         this.model.setup(zoom, precision);
         this.model.setView(re, im, width, height);
+
+        // start render loop
+        this.running = true;
+        window.requestAnimationFrame(this.animationFrame);
     }
 
     componentDidUpdate(prevProps, prevState) {
         const { re, im, zoom, precision, postZoom, width, height } = this.props;
 
         const setupUpdate = zoom != prevProps.zoom || precision != prevProps.precision;
+
         if (setupUpdate) {
             // console.debug('update to zoom level and/or precision', zoom, precision);
             this.model.setup(zoom, precision);
