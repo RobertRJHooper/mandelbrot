@@ -78,21 +78,27 @@ class Point {
     const { z_re2, z_im2 } = this;
 
     // see if the point is outside a square of length sqrt(2)
-    // if not then the point has not escaped
     const reFar = gt(z_re2, TWO);
     const imFar = gt(z_im2, TWO);
-    if (!reFar && !imFar) return false;
+
+    // if not then the point has not escaped
+    // this is the negative short-circuit
+    if (!reFar && !imFar)
+      return false;
 
     // check if one dimension is enought to determine escape
-    if (reFar && gt(z_re2, FOUR)) return true;
-    if (imFar && gt(z_im2, FOUR)) return true;
+    // this is the positive short-circuit
+    if (reFar && gt(z_re2, FOUR))
+      return true;
+    if (imFar && gt(z_im2, FOUR))
+      return true;
 
     // full disc calculation for the remaining region
     return gt(add(z_im2, z_re2), FOUR);
   }
 
   iterate() {
-    const { mul, add, sub, TWO, FOUR, gt } = Arithmetic;
+    const { mul, add, sub, TWO } = Arithmetic;
     const { c_re, c_im, z_re, z_re2, z_im, z_im2 } = this;
 
     // next iteration of z
@@ -205,33 +211,38 @@ class MandelbrotGrid {
       grid_im.push(x);
     }
 
+    // function to generate point from left/right/ top/bottom index
+    function createPoint(idx) {
+      const i = idx % width;
+      const j = (idx - i) / width;
+      const c_re = grid_re[i];
+      const c_im = grid_im[j];
+
+      // we can know by formula that some values remain bounded
+      const boundedByFormula = Arithmetic.mbInMainCardiod(c_re, c_im)
+        || Arithmetic.mbInPrimaryBulb(c_re, c_im);
+
+      // status storage for this point
+      const point = boundedByFormula ? new BoundedPoint() : new Point(c_re, c_im);
+
+      // attach index to point for reference while drawing
+      point.idx = idx;
+      return point;
+    }
+
     /*
     console.log(center_re, center_im, zoom, width, height);
     console.log('im', im);
     console.log('re', re);
     */
 
-    // points lists
+    // points lists - not sure how to vectorize this in Javascript
     const live = [], determined = [];
+    const pointsCount = width * height;
 
-    for (let j = 0; j < height; j++) {
-      for (let i = 0; i < width; i++) {
-        const c_im = grid_im[j];
-        const c_re = grid_re[i];
-
-        // we can know by formula that some values remain bounded
-        const boundedByFormula = Arithmetic.mbInMainCardiod(c_re, c_im)
-          || Arithmetic.mbInPrimaryBulb(c_re, c_im);
-
-        // status storage for this point
-        const point = boundedByFormula ? new BoundedPoint() : new Point(c_re, c_im);
-
-        // attach index to point for reference while drawing
-        point.idx = j * width + i;
-
-        // add to list
-        (point.determined ? determined : live).push(point);
-      }
+    for (let idx = 0; idx < pointsCount; idx++) {
+      const point = createPoint(idx);
+      (point.determined ? determined : live).push(point);
     }
 
     // paint initially determined points

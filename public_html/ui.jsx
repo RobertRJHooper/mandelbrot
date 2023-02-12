@@ -52,7 +52,7 @@ function pushURLParams(re, im, zoom, precision) {
     searchParams.set('re', re);
     searchParams.set('im', im);
     searchParams.set('zoom', zoom);
-    searchParams.set('precision', precision);
+    precision && searchParams.set('precision', precision);
     window.history.pushState({}, '', url);
 }
 
@@ -73,9 +73,10 @@ class App extends React.Component {
             ...App.homeViewState,
 
             // number of significant figures that high precision number have
-            // for low values: regular Javascript floats are used.
-            // for high values: custom (slow) Decimal.js objects are used
-            precision: 15,
+            // for low values / not specified: regular Javascript numbers are used.
+            // for high values: custom (slow) Decimal.js objects are used with rounding
+            // to 'precision' decimal places
+            precision: 0,
 
             // get specified parameters from URL
             // these will cacade on top of defaults
