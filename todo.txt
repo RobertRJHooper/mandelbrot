@@ -1,26 +1,19 @@
 Next todo:
 reform functions comments
-rounding on url zoom
-add precision to url and feed precision through ui using strings for numbers
-move precision calculations all to the model client
-simplify SampleDisplay to avoid needing high precision numbers
 add iterations counter on main display
-allow canvas width and height to be specified or set to auto
-reset should not update the precision
 add tooltips to buttons
-look at panning - is it debounced enough in the workers
-move artithmetic for mb formulas out of artithmetic
 
 Features to make:
-complete sampler draw
-brower url change should trigger reread of url parameterisation
 trace stick on click
-limits to size of caches
 
 maybes:
+limits to size of caches
+move artithmetic for mb formulas out of artithmetic
 test in safari
 add stats to info panel
 get libraries local copy for speed
+sampler will breakdown at high zoom as canvas coordinates overflow - fix
+allow canvas width and height to be specified or set to auto
 
 maybe nots:
 javascript modules - how to with comments
@@ -29,6 +22,12 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+brower url change should trigger reread of url parameterisation
+complete sampler draw
+look at panning - is it debounced enough in the workers
+reset should not update the precision
+add precision to url and feed precision through ui using strings for numbers
+move precision calculations all to the model client
 high precision numbers
 make local copies
 put imaningary numbers to an object when not speed sensitive

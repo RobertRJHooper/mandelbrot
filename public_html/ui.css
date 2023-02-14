@@ -111,6 +111,7 @@
 }
 
 .navbar-item {
+    position: relative;
     margin: 0.5em;
     padding: 0.25em;
 
@@ -139,14 +140,24 @@
     height: 1em;
 }
 
-.navbar-icon-working {
-    animation: rotation 1s infinite linear;
+.navbar-item-tooltip {
+    visibility: hidden;
+    background-color: black;
+    color: white;
+    text-align: center;
+    width: 18ch;
+    border-radius: 6px;
+    padding: 5px 0;
+
+    /* Position the tooltip */
+    position: absolute;
+    z-index: 1;
+    top: 125%;
+    right: 0%;
 }
 
-@keyframes rotation {
-    to {
-        transform: rotate(1turn);
-    }
+.navbar-item:hover .navbar-item-tooltip {
+    visibility: visible;
 }
 
 .info-modal {
