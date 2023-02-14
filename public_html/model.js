@@ -115,7 +115,7 @@ class Point {
     this.age += 1;
 
     // check for escape
-    if (this.escaped()) {
+    if (!this.determined && this.escaped()) {
       this.determined = true;
       this.escapeAge = this.age;
     }
@@ -128,32 +128,6 @@ class BoundedPoint {
     this.determined = true;
     this.escapeAge = null;
   }
-}
-
-// give the complex numbers of a particular point to escape
-// not optimised for speed
-function mbSample(c_re, c_im, iterations = 1000) {
-  const point = new Point(
-    Arithmetic.N(c_re),
-    Arithmetic.N(c_im)
-  );
-
-  // runout of points
-  const zi = [];
-
-  // run to escape of max iterations
-  while (point.age < iterations) {
-    zi.push([point.z_re, point.z_im]);
-    point.iterate();
-
-    if (point.escapeAge && point.escapeAge + 1 < point.age) {
-      break;
-    }
-  }
-
-  // append runout info to point and return
-  point.zi = zi;
-  return point;
 }
 
 // Object that holds a regular rectangular grid of Point objects
@@ -219,8 +193,7 @@ class MandelbrotGrid {
       const c_im = grid_im[j];
 
       // we can know by formula that some values remain bounded
-      const boundedByFormula = Arithmetic.mbInMainCardiod(c_re, c_im)
-        || Arithmetic.mbInPrimaryBulb(c_re, c_im);
+      const boundedByFormula = Arithmetic.mbCheckFormula(c_re, c_im);
 
       // status storage for this point
       const point = boundedByFormula ? new BoundedPoint() : new Point(c_re, c_im);

@@ -1,54 +1,56 @@
 "use strict";
 
 const getModelGeometry = _.memoize(
-    (re, im, zoom, precision) => new ModelGeometry(re, im, zoom, precision)
+    (re, im, zoom, precision) => new ModelGeometry(re, im, zoom, precision),
+    (...args) => (args.map(x => (x || "null").toString()).join(' '))
 );
 
+
 class ModelGeometry {
-    constructor(re, im, zoom, precision) {
+    constructor(center_re, center_im, zoom, precision) {
         this.A = getArithmetic(precision);
 
         // parse to number objects
         const N = this.A.N;
-        this.center_re = N(re);
-        this.center_im = N(im);
+        this.center_re = N(center_re);
+        this.center_im = N(center_im);
         this.zoom = N(zoom);
     }
 
     /* helper to convert pixel coordinates to imaginary plane point */
     rectToImaginary(width, height, x, y) {
-        const { N, add, sub, mul, div } = this.A;
+        const { add, sub, mul, div } = this.A;
         const { center_re, center_im, zoom } = this;
 
         // pixels from center point
         const pixelsX = sub(x, div(width, 2));
         const pixelsY = sub(y, div(height, 2));
 
-        // convert to imaginary plane units and reset origin
+        // convert to imaginary plane units
         const re = add(center_re, div(pixelsX, zoom));
         const im = sub(center_im, div(pixelsY, zoom));
 
-        return { re: re, im: im, }
+        return { re: re, im: im }
     }
 
     /* helper to convert imaginary plane point to pixel coordinates */
-    imaginarytoRect(width, height, point) {
+    imaginaryToRect(width, height, point_re, point_im) {
         const { N, toNumber, add, sub, mul, div } = this.A;
         const { center_re, center_im, zoom } = this;
 
         // align precison
-        const point_re = N(point.re);
-        const point_im = N(point.im);
+        const point_re_ = N(point_re);
+        const point_im_ = N(point_im);
 
         // calculate pixels from center point
-        const pixels_re = mul(sub(point_re, center_re), zoom);
-        const pixels_im = mul(sub(point_im, center_im), zoom);
+        const pixels_re = mul(sub(point_re_, center_re), zoom);
+        const pixels_im = mul(sub(point_im_, center_im), zoom);
 
         // pixel offset from center of canvas
         const x = add(div(width, 2), pixels_re);
         const y = sub(div(height, 2), pixels_im);
 
-        // convert to native numbers for pixel coordinates
+        // convert to native numbers for local pixel coordinates
         return {
             x: toNumber(x),
             y: toNumber(y),
@@ -93,9 +95,8 @@ class ModelGeometry {
     }
 }
 
-
 /* class to handle communication with workers */
-class ModelClient {
+class PanelsClient {
     static maxWorkerCount = 8;
 
     // ms to run before idling workers after the last flush call
@@ -120,12 +121,12 @@ class ModelClient {
     }
 
     initiate() {
-        const workerCount = Math.min(navigator.hardwareConcurrency || 1, ModelClient.maxWorkerCount);
+        const workerCount = Math.min(navigator.hardwareConcurrency || 1, PanelsClient.maxWorkerCount);
         console.debug(`initiating model with ${workerCount} workers`);
 
         this.workers = []
         for (let i = 0; i < workerCount; i++) {
-            const worker = new Worker('modelworker.js');
+            const worker = new Worker('panelsworker.js');
             worker.onmessage = this.workerMessage.bind(this);
             this.workers.push(worker);
         }
@@ -159,7 +160,7 @@ class ModelClient {
                 command: 'setup',
                 zoom: zoom.toString(),
                 precision: precision,
-                panelLength: ModelClient.panelLength,
+                panelLength: PanelsClient.panelLength,
                 setupReference: this.setupReference,
             });
         });
@@ -203,7 +204,7 @@ class ModelClient {
         for (const worker of this.workers) {
             worker.postMessage({
                 command: 'limit',
-                timeToIdle: Date.now() + ModelClient.timeToIdle,
+                timeToIdle: Date.now() + PanelsClient.timeToIdle,
             });
         }
     }
@@ -247,5 +248,40 @@ class ModelClient {
             snaps: snaps,
             update: !flushFromBlank,
         }
+    }
+}
+
+class SampleClient {
+    constructor(callback) {
+        this.callback = callback;
+        this.worker = null;
+    }
+
+    initiate() {
+        this.worker = new Worker('sampleworker.js');
+        this.worker.onmessage = this.workerMessage.bind(this);
+    }
+
+    terminate() {
+        this.worker && this.worker.terminate();
+        this.worker = null;
+    }
+
+    submit(re, im) {
+        const worker = this.worker;
+
+        if(!worker) {
+            console.warn('sample request submitted when worker not setup');
+            return;
+        }
+
+        worker.postMessage({
+            re: re,
+            im: im,
+        });
+    }
+
+    workerMessage(message) {
+        this.callback && this.callback(message.data);
     }
 }

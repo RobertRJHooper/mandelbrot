@@ -9,6 +9,7 @@ allow canvas width and height to be specified or set to auto
 reset should not update the precision
 add tooltips to buttons
 look at panning - is it debounced enough in the workers
+move artithmetic for mb formulas out of artithmetic
 
 Features to make:
 complete sampler draw

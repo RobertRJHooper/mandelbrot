@@ -1,13 +1,12 @@
 // return an object containing arithmetic operations
 // for the given precision
 function getArithmetic(precision) {
-  if (precision <= 19) {
+  if (!precision || precision <= 19)
     return NativeArithmetic();
-  } else {
-    return DecimalArithmetic(precision);
-  }
-}
 
+  // high precision
+  return DecimalArithmetic(precision);
+}
 
 // varying precision floating point functions
 function DecimalArithmetic(precision) {
@@ -32,6 +31,7 @@ function DecimalArithmetic(precision) {
     add: N.add.bind(N),
     sub: N.sub.bind(N),
     mod: N.mod.bind(N),
+    
     neg: x => x.neg(),
     lt: (x, y) => x.lt(y),
     gt: (x, y) => x.gt(y),
@@ -249,6 +249,11 @@ function NativeArithmetic() {
   A.mbInPrimaryBulb = function (re, im) {
     return A.BULBS.some(bulb => A.mbBulbContains(bulb, re, im));
   }
+
+  // check if the point is in a known bounded region by formula
+  A.mbCheckFormula = (re, im) => A.mbInMainCardiod(re, im)
+    || Arithmetic.mbInPrimaryBulb(re, im);
+
 
   // all done
   return A;
