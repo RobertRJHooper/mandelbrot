@@ -267,7 +267,7 @@ class SampleClient {
         this.worker = null;
     }
 
-    submit(re, im) {
+    submit(re, im, precision) {
         const worker = this.worker;
 
         if(!worker) {
@@ -276,8 +276,9 @@ class SampleClient {
         }
 
         worker.postMessage({
-            re: re,
-            im: im,
+            re: re.toString(),
+            im: im.toString(),
+            precision: precision,
         });
     }
 

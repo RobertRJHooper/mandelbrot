@@ -2,7 +2,7 @@
 // for the given precision
 function getArithmetic(precision) {
   if (!precision || precision <= 19)
-    return NativeArithmetic();
+    return NativeArithmetic(precision);
 
   // high precision
   return DecimalArithmetic(precision);
@@ -14,6 +14,8 @@ function DecimalArithmetic(precision) {
 
   // build to Artithmetic constants/functions set
   let A = {
+    precision: precision,
+
     N: x => {
       switch (typeof (x)) {
         case 'bigint':
@@ -31,7 +33,7 @@ function DecimalArithmetic(precision) {
     add: N.add.bind(N),
     sub: N.sub.bind(N),
     mod: N.mod.bind(N),
-    
+
     neg: x => x.neg(),
     lt: (x, y) => x.lt(y),
     gt: (x, y) => x.gt(y),
@@ -131,16 +133,21 @@ function DecimalArithmetic(precision) {
     return A.BULBS.some(bulb => A.mbBulbContains(bulb, re, im));
   }
 
+  // check if the point is in a known bounded region by formula
+  A.mbCheckFormula = (re, im) => A.mbInMainCardiod(re, im)
+    || Arithmetic.mbInPrimaryBulb(re, im);
+
   // all done
   return A;
 }
 
 // use normal javascript floats
-function NativeArithmetic() {
+function NativeArithmetic(precision) {
   const N = Number;
 
   // build to Artithmetic constants/functions set
   let A = {
+    precision: precision,
     N: N,
     toNumber: x => x,
     toBigInt: x => BigInt(x.toString()),
@@ -253,7 +260,6 @@ function NativeArithmetic() {
   // check if the point is in a known bounded region by formula
   A.mbCheckFormula = (re, im) => A.mbInMainCardiod(re, im)
     || Arithmetic.mbInPrimaryBulb(re, im);
-
 
   // all done
   return A;

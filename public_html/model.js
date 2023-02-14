@@ -130,6 +130,45 @@ class BoundedPoint {
   }
 }
 
+// a single runout for a point
+function getSample(re, im, iterations) {
+  const { N, mbCheckFormula } = Arithmetic;
+
+  // point iterator
+  const point = new Point(re, im);
+
+  // runout of points (= z_i)
+  const runout = [];
+
+  // push origin
+  runout.push([N(0), N(0)]);
+
+  // run to escape of maximum 'iterations'
+  // and add each iteration z to the runout
+  while (point.age < iterations) {
+    runout.push([point.z_re, point.z_im]);
+    point.iterate();
+
+    // break earlier a couple of iterations after escape
+    if (point.escapeAge && point.escapeAge + 1 < point.age)
+      break;
+  }
+
+  // determine if the point is known bounded
+  const boundedByFormula = mbCheckFormula(re, im);
+
+  // all done
+  return {
+    re: re,
+    im: im,
+    runout: runout,
+    escapeAge: point.escapeAge,
+    boundedByFormula: boundedByFormula,
+    determined: boundedByFormula || point.determined,
+  }
+}
+
+
 // Object that holds a regular rectangular grid of Point objects
 class MandelbrotGrid {
   constructor(center_re, center_im, zoom, width, height, retain = false) {

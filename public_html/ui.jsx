@@ -275,7 +275,7 @@ class App extends React.Component {
         if(sampleVisible) {
             const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
             const samplePoint = geo.rectToImaginary(width, height, x, y);
-            this.sampler.submit(samplePoint.re, samplePoint.im);
+            this.sampler.submit(samplePoint.re, samplePoint.im, precision);
         }
     }
 
