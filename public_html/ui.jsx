@@ -500,22 +500,31 @@ class SampleDisplay extends React.Component {
         const points = sample.runout.map(z => geo.imaginaryToRect(width, height, z[0], z[1]));
 
         // draw line between points
-        context.beginPath();
         context.strokeStyle = "white";
         context.lineWidth = 2;
 
-        // move to first point
-        const point0 = points[0];
-        context.moveTo(point0.x, point0.y);
-
-        // line to further points
-        for (const point of points) {
-            context.lineTo(point.x, point.y);
+        for(let i = 1; i < points.length; i++) {
+            const point0 = points[i-1];
+            const point1 = points[i];
+            context.beginPath();
+            context.moveTo(point0.x, point0.y);
+            context.lineTo(point1.x, point1.y);
+            context.stroke();
         }
-        context.stroke();
 
-        // circles with point index
-        // todo
+        // draw circles at each point
+        const radius = 5;
+        context.fillStyle = sample.escapeAge !== null ? "red" : "green";
+        context.strokeStyle = "black";
+        context.lineWidth = 1;
+
+        for(let i = points.length - 1; i; i--) {
+            const point = points[i]; 
+            context.beginPath();
+            context.arc(point.x, point.y, radius, 0, 2 * Math.PI);
+            context.fill();
+            context.stroke();
+        }
     }
 
     render() {
