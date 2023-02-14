@@ -203,7 +203,7 @@ class App extends React.Component {
                     postZoom={postZoom}
                 />
 
-                {sampleVisible && !infoModalVisible && (postZoom == 1) && (Number(zoom) < 10000) &&
+                {sampleVisible && !infoModalVisible && (postZoom == 1) &&
                     <SampleDisplay
                         viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
                         width={width}
