@@ -59,8 +59,8 @@ class ModelGeometry {
 
     /* return the new zoom value give a further magnification factor */
     magnify(factor) {
-        const { mul, round } = this.A;
-        return mul(this.zoom, factor);
+        const { N, mul, round } = this.A;
+        return mul(this.zoom, N(factor));
     }
 
     /* get canvas coordinates from panel coordinates */

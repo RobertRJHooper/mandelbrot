@@ -1,7 +1,7 @@
 Next todo:
 reform functions comments
 add iterations counter on main display
-add tooltips to buttons
+add bulbs
 
 Features to make:
 trace stick on click
@@ -22,6 +22,7 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+add tooltips to buttons
 brower url change should trigger reread of url parameterisation
 complete sampler draw
 look at panning - is it debounced enough in the workers
