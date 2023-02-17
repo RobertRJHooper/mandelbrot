@@ -1,14 +1,13 @@
 Next todo:
 reform functions comments
-add iterations counter on main display
-add bulbs
-restrict cpu usage by mem
-add memory check when creating panels and warn about it
 
 Features to make:
-trace stick on click
 
 maybes:
+add iterations counter on main display
+add more bulbs
+restrict cpu usage by mem
+add memory check when creating panels and warn about it
 limits to size of caches
 move artithmetic for mb formulas out of artithmetic
 test in safari
@@ -24,6 +23,7 @@ convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+trace stick on click
 add tooltips to buttons
 brower url change should trigger reread of url parameterisation
 complete sampler draw

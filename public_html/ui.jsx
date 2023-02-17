@@ -7,7 +7,7 @@ function pullURLParams() {
 
     // validor of decimal numbers in string format
     function isDefined(x) { return typeof (x) != 'undefined' && x != null; }
-    function isValidNumber(x) { return /^[-+]?\d+\.?\d*$/.test(x); }
+    function isValidNumber(x) { return Number.isFinite(Number(x)); }
 
     // names of parameters and corresponding state variable name
     const names = {
