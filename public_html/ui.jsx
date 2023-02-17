@@ -307,7 +307,7 @@ class App extends React.Component {
     /* bake postZoom into base zoom */
     onZoomComplete() {
         this.setState((state, props) => {
-            const { viewRe, viewIm, zoom, precision } = state;
+            const { viewRe, viewIm, zoom, precision, postZoom } = state;
             const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
             return { zoom: geo.magnify(postZoom), postZoom: 1 };
         });
