@@ -80,7 +80,7 @@ class Point {
 
 // a single runout for a point
 function getSample(re, im, iterations) {
-  const { N, mbCheckFormula } = Arithmetic;
+  const { N } = Arithmetic;
 
   // point iterator
   const point = new Point(re, im);
@@ -102,17 +102,12 @@ function getSample(re, im, iterations) {
       break;
   }
 
-  // determine if the point is known bounded
-  const boundedByFormula = mbCheckFormula(re, im);
-
-  // all done
   return {
     re: re,
     im: im,
     runout: runout,
     escapeAge: point.escapeAge,
-    boundedByFormula: boundedByFormula,
-    determined: boundedByFormula || point.determined,
+    determined: point.determined,
   }
 }
 
@@ -124,16 +119,23 @@ class MainCardiod {
   // left, right, bottom, top
   static exclusion = [-0.76, 0.38, -0.66, +0.66];
 
-  // maximum internal rectangle for the main cardiod
+  // rectangles inside for the main cardiod
   // left, right, bottom, top
-  static inclusion = [-0.5, 0.23, -0.5, +0.5];
+  static inclusions = [
+    [-0.51, 0.23, -0.51, +0.51],
+    [-0.675, -0.5, -0.305, +0.305],
+    [-0.354, 0.1, +0.5, +0.603],
+    [-0.354, 0.1, -0.603, -0.5],
+    [+0.23, 0.33, +0.061, +0.388],
+    [+0.23, 0.33, -0.388, -0.061],
+  ];
 
   constructor() {
     const { N } = Arithmetic;
 
     // setup according to the current global Artithmetic at instance creation time
-    this.inclusion = MainCardiod.inclusion.map(N);
     this.exclusion = MainCardiod.exclusion.map(N);
+    this.inclusions = MainCardiod.inclusions.map(r => r.map(N));
   }
 
   // check if a point is in the main cardiod
@@ -147,10 +149,16 @@ class MainCardiod {
       return false;
 
     // short-circuit positive
-    const [e, f, g, h] = this.inclusion;
+    for (const rect of this.inclusions) {
+      const [e, f, g, h] = rect;
 
-    if (gt(re, e) && lt(re, f) && gt(im, g) && lt(im, h))
-      return true;
+      if (gt(re, e) && lt(re, f) && gt(im, g) && lt(im, h))
+        return true;
+    }
+
+    // the calculation below are too costly
+    // iterate all remaining points
+    return false;
 
     // full calculation for main cardiod using principle square root
     // |sqrt(1 - 4c) - 1| < 1 with c = re + i * im

@@ -17,8 +17,9 @@ var Arithmetic = null;
 var requestID = null;
 
 function processRequest(re, im, precision) {
-  if(!Arithmetic || Arithmetic.precision != precision)
+  if(!Arithmetic || Arithmetic.precision != precision) {
     Arithmetic = getArithmetic(precision);
+  }
   
   // generate sample in model.js
   const { N } = Arithmetic;
