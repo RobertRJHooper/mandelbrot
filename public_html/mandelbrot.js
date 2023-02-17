@@ -156,9 +156,8 @@ class MainCardiod {
         return true;
     }
 
-    // the calculation below are too costly
-    // iterate all remaining points
-    return false;
+    // the calculation below are costly for high precision
+    // and will cause an initial delay to display
 
     // full calculation for main cardiod using principle square root
     // |sqrt(1 - 4c) - 1| < 1 with c = re + i * im
