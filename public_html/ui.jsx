@@ -415,8 +415,8 @@ class MandelbrotSet extends React.Component {
         const throttlePassed = !this.lastFrameTime || (this.lastFrameTime + MandelbrotSet.framePeriod < timestamp);
 
         if (this.running && throttlePassed && this.canvas.current && this.model) {
-            const { snaps, update } = this.model.flush();
-            this.drawSnaps(snaps, update);
+            const { snapshots, update } = this.model.flush();
+            this.drawSnaps(snapshots, update);
             this.lastFrameTime = timestamp;
         }
 

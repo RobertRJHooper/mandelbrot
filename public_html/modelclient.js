@@ -100,20 +100,17 @@ class PanelsClient {
     static maxWorkerCount = 8;
 
     // ms to run before idling workers after the last flush call
-    static timeToIdle = 3000;
-
-    // width and height of panels in pixels
-    static panelLength = 32;
+    static timeToIdle = 1000;
 
     constructor() {
         this.workers = null;
 
         // reference counter to check for expired snaps
-        this.setupReference = 0;
+        this.reference = 0;
         this.iterations = 0;
 
         // snaps of panels and updated snaps since last flush
-        this.snaps = new Map();
+        this.snapshots = new Map();
         this.updates = new Map();
 
         // flag if the next flush is from blank. Otherwise, it is cumulative on previous flushes 
@@ -146,22 +143,21 @@ class PanelsClient {
         }
 
         // clear snap caches
-        this.snaps = new Map();
+        this.snapshots = new Map();
         this.updates = new Map();
         this.flushFromBlank = true;
 
         // update reference counters
-        this.setupReference += 1;
+        this.reference += 1;
         this.iterations = 0;
 
         // send to workers
         this.workers.forEach(worker => {
             worker.postMessage({
                 command: 'setup',
+                reference: this.reference,
                 zoom: zoom.toString(),
                 precision: precision,
-                panelLength: PanelsClient.panelLength,
-                setupReference: this.setupReference,
             });
         });
     }
@@ -186,8 +182,8 @@ class PanelsClient {
         this.workers.forEach((worker, workerIndex) => {
             worker.postMessage({
                 command: 'view',
-                center_re: re.toString(),
-                center_im: im.toString(),
+                re: re.toString(),
+                im: im.toString(),
                 width: width,
                 height: height,
                 step: this.workers.length,
@@ -210,17 +206,17 @@ class PanelsClient {
     }
 
     workerMessage(message) {
-        const { setupReference, iterations, snaps } = message.data;
+        const { reference, iterations, snapshots } = message.data;
 
-        if (setupReference != this.setupReference) {
+        if (reference != this.reference) {
             console.debug("expired snaps received from worker");
             return;
         }
 
-        for (const snap of snaps) {
-            const key = `${snap.panelX} ${snap.panelY}`;
-            this.updates.set(key, snap);
-            this.snaps.set(key, snap);
+        for (const snapshot of snapshots) {
+            const key = `${snapshot.panelX} ${snapshot.panelY}`;
+            this.updates.set(key, snapshot);
+            this.snapshots.set(key, snapshot);
         }
 
         // diagnostic info
@@ -242,10 +238,10 @@ class PanelsClient {
         // copy to a fresh array because this.snaps will be updated in future
         // otherwise send just the cumulative updates
         // updates is now final, so no need to make a copy
-        const snaps = flushFromBlank ? Array.from(this.snaps.values()) : updates.values();
+        const snapshots = flushFromBlank ? Array.from(this.snapshots.values()) : updates.values();
 
         return {
-            snaps: snaps,
+            snapshots: snapshots,
             update: !flushFromBlank,
         }
     }

@@ -4,7 +4,7 @@ importScripts(
   'lib/lodash.min.js',
   'lib/decimal.js',
   'arithmetic.js',
-  'model.js'
+  'mandelbrot.js',
 );
 
 // maximum iterations for samples

@@ -2,6 +2,8 @@ Next todo:
 reform functions comments
 add iterations counter on main display
 add bulbs
+restrict cpu usage by mem
+add memory check when creating panels and warn about it
 
 Features to make:
 trace stick on click
