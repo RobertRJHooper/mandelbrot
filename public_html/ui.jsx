@@ -32,7 +32,7 @@ class App extends React.Component {
             // to 'precision' decimal places
             precision: 0,
 
-            // get specified parameters from URL
+            // get any parameters from URL
             ...this.getURLParams() || {},
 
             // pixel dimensions of the display element
@@ -191,7 +191,8 @@ class App extends React.Component {
     // inner render when we know the container dimensions
     renderContent() {
         const {
-            viewRe, viewIm,
+            viewRe,
+            viewIm,
             zoom,
             precision,
             postZoom,
@@ -232,10 +233,10 @@ class App extends React.Component {
                 <Navbar
                     onReset={() => this.setState({ ...App.homeView, infoModalVisible: false })}
                     mouseMode={this.state.mouseMode}
-                    onSelectBox={() => this.setState((state) => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
+                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
                     sampleVisible={sampleVisible}
-                    onSampleToggle={() => this.setState((state) => ({ sampleVisible: !state.sampleVisible }))}
-                    onInfoToggle={() => this.setState((state) => ({ infoModalVisible: !state.infoModalVisible }))}
+                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible }))}
+                    onInfoToggle={() => this.setState(state => ({ infoModalVisible: !state.infoModalVisible }))}
                 />
 
                 <InfoModal
@@ -297,14 +298,14 @@ class App extends React.Component {
             const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
 
             // new center
-            const newCenter = geo.rectToImaginary(
+            const center = geo.rectToImaginary(
                 width,
                 height,
                 width / 2 - dx,
                 height / 2 - dy
             );
 
-            return { viewRe: newCenter.re, viewIm: newCenter.im };
+            return { viewRe: center.re, viewIm: center.im };
         });
     }
 
@@ -326,7 +327,7 @@ class App extends React.Component {
             const { viewRe, viewIm, zoom, precision, width, height } = state;
             const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
 
-            const newCenter = geo.rectToImaginary(
+            const center = geo.rectToImaginary(
                 width,
                 height,
                 box.left + box.width / 2,
@@ -338,13 +339,13 @@ class App extends React.Component {
             const factor = fitWidth ? width / box.width : height / box.height;
             const newZoom = geo.magnify(factor);
 
-            console.debug("sub box selected with center", newCenter.re, newCenter.im);
+            console.debug("sub box selected with center", center.re, center.im);
             console.debug("magnifying x", factor);
             console.debug("zoom level", newZoom);
 
             return {
-                viewRe: newCenter.re,
-                viewIm: newCenter.im,
+                viewRe: center.re,
+                viewIm: center.im,
                 zoom: newZoom,
                 postZoom: 1,
                 mouseMode: 'pan',
