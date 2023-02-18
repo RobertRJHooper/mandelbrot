@@ -1,21 +1,29 @@
 "use strict";
 
-// these functions require an arithmetic system set up
-// under the global variable Artihmetic with the required precision
-// var Arithmetic = getArithmetic(15);
+/**
+ * these functions require an arithmetic system set up 
+ * under the global variable Artihmetic with the required precision
+ * var Arithmetic = getArithmetic(15);
+ */
 
+/** Class representing a point on the complex plane that can be iterated under the mandelbrot set transformation z -> z² + c. */
 class Point {
-  constructor(c_re, c_im) {
+  /**
+  * Create a point
+  * @param {object} re - Real value of the complex point
+  * @param {object} im - Imaginary value of the complex point
+  */
+  constructor(re, im) {
     const { mul } = Arithmetic;
 
-    this.c_re = c_re;
-    this.c_im = c_im;
+    this.c_re = re;
+    this.c_im = im;
 
     this.age = 1;
-    this.z_re = c_re;
-    this.z_re2 = mul(c_re, c_re); // z_re squared
-    this.z_im = c_im;
-    this.z_im2 = mul(c_im, c_im); // z_im squared
+    this.z_re = re;
+    this.z_re2 = mul(re, re); // z_re squared
+    this.z_im = im;
+    this.z_im2 = mul(im, im); // z_im squared
 
     if (this.escaped()) {
       this.determined = true;
@@ -26,8 +34,10 @@ class Point {
     }
   }
 
-  // check for escape (with short-circuits for speed)
-  // this is when z is outside the disk with radius 2 about origin
+  /**
+   * Check if the point has escaped from the disk about the origin radius 2 at the current iteration.
+   * @returns {boolean} True if and only if the point has escaped
+   */
   escaped() {
     const { add, gt, TWO, FOUR } = Arithmetic;
     const { z_re2, z_im2 } = this;
@@ -53,6 +63,9 @@ class Point {
     return gt(add(z_im2, z_re2), FOUR);
   }
 
+  /**
+   * Iterate the current point once and check if escape has occurred
+   */
   iterate() {
     const { mul, add, sub, TWO } = Arithmetic;
     const { c_re, c_im, z_re, z_re2, z_im, z_im2 } = this;
@@ -78,7 +91,13 @@ class Point {
   }
 }
 
-// a single runout for a point
+/**
+ * Generate a sample of a complex point run out under mandelbrot iteration until escape or the specified number of iterations have happened
+ * @param {object} re - Real value of the complex point
+ * @param {object} im - Imaginary value of the complex point
+ * @param {integer} iterations - The number of iterations to stop the calculation if escape has not occured
+ * @return {object} An object containing the runout, escape age and a flag wheter the point was determined by the end of the iterations. 
+ */
 function getSample(re, im, iterations) {
   const { N } = Arithmetic;
 
@@ -111,16 +130,13 @@ function getSample(re, im, iterations) {
   }
 }
 
-// points in the main cardiod can be found by formula
-// and are known to be part of the mandelbrot set
+/* A class representing the main cardiod of the mandelbrot set */
 class MainCardiod {
 
-  // smallest bounding rectangle for the main cardiod
-  // left, right, bottom, top
+  // smallest bounding rectangle for the main cardiod: left, right, bottom, top
   static exclusion = [-0.76, 0.38, -0.66, +0.66];
 
-  // rectangles inside for the main cardiod
-  // left, right, bottom, top
+  // rectangles inside for the main cardiod: left, right, bottom, top
   static inclusions = [
     [-0.51, 0.23, -0.51, +0.51],
     [-0.675, -0.5, -0.305, +0.305],
@@ -130,6 +146,9 @@ class MainCardiod {
     [+0.23, 0.33, -0.388, -0.061],
   ];
 
+  /**
+   * Constructor for the class that uses the current global Artithmetic at time of creation
+   */
   constructor() {
     const { N } = Arithmetic;
 
@@ -138,7 +157,11 @@ class MainCardiod {
     this.inclusions = MainCardiod.inclusions.map(r => r.map(N));
   }
 
-  // check if a point is in the main cardiod
+  /**
+   * Check if a point is in the main cardiod.
+   * @param {object} re - The real value of the point to test
+   * @param {object} im - The imaginary value of the point to test
+   */
   test(re, im) {
     const { lt, gt } = Arithmetic;
 
@@ -188,9 +211,15 @@ class MainCardiod {
   }
 }
 
-// A bulb is a circle on the complex plane that is
-// known to be in the mandelbrot set
+/* Class representing a bulb (a circle) on the complex plane that is known to be in the mandelbrot set */
 class Bulb {
+  /**
+   * Contructor for the bulb class.
+   * @param {object} re - Real point of the center of the bulb
+   * @param {object} im - Imaginary point of the center of the bulb
+   * @param {object} radius - Radius of the bulb in the complex plane
+   * 
+   */
   constructor(re, im, radius) {
     const { N, mul, div, add, sub, SQRT2 } = Arithmetic;
 
@@ -220,6 +249,11 @@ class Bulb {
     ];
   }
 
+  /**
+ * Check if a point is in the bulb.
+ * @param {object} re - The real value of the point to test
+ * @param {object} im - The imaginary value of the point to test
+ */
   test(re, im) {
     const { lt, gt } = Arithmetic;
 
@@ -246,8 +280,7 @@ class Bulb {
   }
 }
 
-// get the major bulbs in the current Arithmetic
-// TODO: add more buls to these
+/* A helper to return known major regions inside the mandelbrot set */
 function getKnownRegions() {
   return [
     new MainCardiod(),

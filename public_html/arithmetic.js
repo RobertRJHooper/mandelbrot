@@ -1,11 +1,14 @@
 "use strict";
 
-// use normal javascript floats
-function NativeArithmetic(precision) {
+/**
+ * Arithmetic provider based on standard javascript Numbers.
+ * @constructor
+ */
+function NativeArithmetic() {
   const N = Number;
 
   return {
-    precision: precision,
+    precision: "native",
     N: N,
     toNumber: x => x,
     toBigInt: x => BigInt(x.toString()),
@@ -40,7 +43,11 @@ function NativeArithmetic(precision) {
   };
 }
 
-// varying precision floating point functions
+/**
+ * Arithmetic provider based on multi-precision Decimal.js numbers
+ * @constructor
+ * @param {integer} precision - The number of decimal places that numbers are rounded to. 
+ */
 function DecimalArithmetic(precision) {
   const N = Decimal.clone({ precision: precision, defaults: true });
 
@@ -89,13 +96,13 @@ function DecimalArithmetic(precision) {
   };
 }
 
-
-// return an object containing arithmetic operations
-// for the given precision
+/**
+ * Helper function to get an appropriate arithmetic provider.
+ * @param {integer} precision - The number of decimal places that numbers are rounded to.
+ */
 function getArithmetic(precision) {
   if (!precision || precision <= 19)
-    return NativeArithmetic(precision);
+    return NativeArithmetic();
 
-  // high precision
-  return DecimalArithmetic(precision);
+   return DecimalArithmetic(precision);
 }

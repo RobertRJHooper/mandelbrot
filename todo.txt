@@ -4,25 +4,28 @@ reform functions comments
 Features to make:
 
 maybes:
+add cross to sampler point and make the first point blue
+allow click to fix sampler point
+make a info display area that appears on touches or mouse movement
+add stats to info panel
 add iterations counter on main display
+limits to size of caches - clear points two screens away from center panel
 add more bulbs
 restrict cpu usage by mem
 add memory check when creating panels and warn about it
-limits to size of caches
-move artithmetic for mb formulas out of artithmetic
 test in safari
-add stats to info panel
-get libraries local copy for speed
-sampler will breakdown at high zoom as canvas coordinates overflow - fix
-allow canvas width and height to be specified or set to auto
 
 maybe nots:
+sampler will breakdown at high zoom as canvas coordinates overflow - fix
+allow canvas width and height to be specified or set to auto
 javascript modules - how to with comments
 github releases mechanism for continous deployment
 convert numbered points to html elements so they zoom properly
 time limiting
 
 done:
+move artithmetic for mb formulas out of artithmetic
+get libraries local copy for speed
 trace stick on click
 add tooltips to buttons
 brower url change should trigger reread of url parameterisation

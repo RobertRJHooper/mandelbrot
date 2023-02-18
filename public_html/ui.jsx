@@ -1,103 +1,46 @@
 "use strict";
 
-/* get viewbox as specified in the URL, or return null if not valid */
-function pullURLParams() {
-    const url = new URL(window.location);
-    const searchParams = url.searchParams;
-
-    // validor of decimal numbers in string format
-    function isDefined(x) { return typeof (x) != 'undefined' && x != null; }
-    function isValidNumber(x) { return Number.isFinite(Number(x)); }
-
-    // names of parameters and corresponding state variable name
-    const names = {
-        re: 'viewRe',
-        im: 'viewIm',
-        zoom: 'zoom',
-        precision: 'precision'
-
-    }
-
-    // retreive and validate parameters that are specified
-    const out = {};
-
-    for (const name in names) {
-        const value = searchParams.get(name);
-
-        if (!isDefined(value))
-            continue;
-
-        if (!isValidNumber(value)) {
-            console.error('bad parameter', name, value);
-            return;
-        }
-
-        out[names[name]] = value;
-    }
-
-    // check zoom is positive
-    if (isDefined(out.zoom) && out.zoom.startsWith('-')) {
-        console.error('zoom must be positive');
-        return;
-    }
-
-    // check precision is positive
-    if (isDefined(out.precision) && out.precision.startsWith('-')) {
-        console.error('precision must be positive');
-        return;
-    }
-
-    // parse precision to a number
-    if (isDefined(out.precision))
-        out.precision = Number(out.precision);
-
-    return out;
-}
-
-/* push the view to the URL if it's not already there */
-function pushURLParams(viewRe, viewIm, zoom, precision) {
-    const url = new URL(window.location);
-    const searchParams = url.searchParams;
-    searchParams.set('re', viewRe);
-    searchParams.set('im', viewIm);
-    searchParams.set('zoom', zoom);
-    precision && searchParams.set('precision', precision);
-    window.history.pushState({}, '', url);
-}
-
+/** React class that handles displaying the mandelbrot set and an user interface for exploring it */
 class App extends React.Component {
-    static homeViewState = {
-        // complex coordinates of the center of the view 
+
+    /**
+     * Fully zoomed out view of mandelbrot set
+     */
+    static homeView = {
         viewRe: "0",
         viewIm: "0",
-
-        // zoom is the number of pixels per unit in the imaginary plane
-        zoom: "180",
+        zoom: "220",
     };
 
     constructor(props) {
         super(props);
 
         this.state = {
-            ...App.homeViewState,
+
+            // complex coordinates of the center of the view
+            // The initial value is a beautiful point. These are overwritten if
+            // values are specified in the URL parameters
+            viewRe: "-1.3734347650208165",
+            viewIm: "+0.0847181657743398",
+
+            // zoom is the number of pixels per unit in the imaginary plane
+            zoom: "75000",
 
             // number of significant figures that high precision number have
-            // for low values / not specified: regular Javascript numbers are used.
+            // for low values / not specified: regular Javascript numbers are used
             // for high values: custom (slow) Decimal.js objects are used with rounding
             // to 'precision' decimal places
             precision: 0,
 
             // get specified parameters from URL
-            // these will cacade on top of defaults
-            ...pullURLParams() || {},
+            ...this.getURLParams() || {},
 
             // pixel dimensions of the display element
             width: 0,
             height: 0,
 
             // What does panning with the mouse or touch pad do
-            // 'pan' - move the center point around
-            // or 
+            // 'pan'        - move the center point around 
             // 'box-select' - draw a box and zoom into that box on release
             mouseMode: 'pan',
 
@@ -116,27 +59,112 @@ class App extends React.Component {
         // keep track of container dimensions
         this.container = React.createRef();
 
-        // external state observation
+        // external state observation to monitor the display container pixel dimensions
         this.resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
-                if (entry.target == this.container.current) this.pullContainerDimensions();
+                if (entry.target == this.container.current)
+                    this.pullContainerDimensions();
             }
         });
-        this.pushStateToURL = this.pushStateToURL.bind(this);
-
+        
         // callbacks for child elements
         this.onBoxSelect = this.onBoxSelect.bind(this);
         this.onPointHover = this.onPointHover.bind(this);
         this.onPan = this.onPan.bind(this);
         this.onZoomChange = this.onZoomChange.bind(this);
         this.onZoomComplete = this.onZoomComplete.bind(this);
-
-        // pushing zoom back to URL on updates with debounce throttling
+        
+        // bind functions that can be passed as callbacks
         this.pullStateFromURL = this.pullStateFromURL.bind(this);
         this.pushStateToURLDebounced = _.debounce(this.pushStateToURL.bind(this), 1000);
 
         // client for getting single point samples
         this.sampler = new SampleClient(this.onSampleAvailable.bind(this));
+    }
+
+    /* get viewbox as specified in the URL */
+    getURLParams() {
+        const url = new URL(window.location);
+        const searchParams = url.searchParams;
+
+        // validator of decimal numbers in string format
+        // this just checks they are valid numbers but doesn't parse from string
+        // because they may truncate the precision to check
+        function isDefined(x) { return typeof (x) != 'undefined' && x != null; }
+        function isValidNumber(x) { return Number.isFinite(Number(x)); }
+
+        // names of parameters and corresponding state variable name
+        const names = {
+            re: 'viewRe',
+            im: 'viewIm',
+            zoom: 'zoom',
+            precision: 'precision'
+        }
+
+        // retreive and validate parameters that are specified
+        const out = {};
+
+        for (const name in names) {
+            const value = searchParams.get(name);
+
+            if (!isDefined(value))
+                continue;
+
+            if (!isValidNumber(value)) {
+                console.error('bad parameter', name, value);
+                return;
+            }
+
+            out[names[name]] = value;
+        }
+
+        // check zoom is positive
+        if (isDefined(out.zoom) && out.zoom.startsWith('-')) {
+            console.error('zoom must be positive');
+            return;
+        }
+
+        // check precision is positive
+        if (isDefined(out.precision) && out.precision.startsWith('-')) {
+            console.error('precision must be positive');
+            return;
+        }
+
+        // parse precision to a number
+        if (isDefined(out.precision))
+            out.precision = Number(out.precision);
+
+        return out;
+    }
+
+    /* Pull the view from the URL to the state */
+    pullStateFromURL() {
+        const current = this.getURLParams();
+        current && this.setState(current);
+    }
+
+    /* push the view from the state to the URL */
+    pushStateToURL() {
+        const { viewRe, viewIm, zoom, precision } = this.state;
+        const current = this.getURLParams();
+
+        // check to see if the URL needs updating
+        const changed = !current
+            || current.viewRe != viewRe
+            || current.viewIm != viewIm
+            || current.zoom != zoom
+            || current.precision != precision;
+
+        // update URL on change
+        if (changed) {
+            const url = new URL(window.location);
+            const searchParams = url.searchParams;
+            searchParams.set('re', viewRe);
+            searchParams.set('im', viewIm);
+            searchParams.set('zoom', zoom);
+            precision && searchParams.set('precision', precision);
+            window.history.pushState({}, '', url);
+        }
     }
 
     /* pull the container dimensions into the state */
@@ -147,26 +175,6 @@ class App extends React.Component {
             width: container.offsetWidth,
             height: container.offsetHeight,
         });
-    }
-
-    pullStateFromURL() {
-        const current = pullURLParams();
-        current && this.setState(current);
-    }
-
-    pushStateToURL() {
-        const { viewRe, viewIm, zoom, precision } = this.state;
-        const current = pullURLParams();
-
-        // look for changes
-        const changed = !current
-            || current.viewRe != viewRe
-            || current.viewIm != viewIm
-            || current.zoom != zoom
-            || current.precision != precision;
-
-        // update URL on change
-        if (changed) pushURLParams(viewRe, viewIm, zoom, precision);
     }
 
     // outer render before dimensions are known
@@ -222,7 +230,7 @@ class App extends React.Component {
                 />
 
                 <Navbar
-                    onReset={() => this.setState({ ...App.homeViewState, infoModalVisible: false })}
+                    onReset={() => this.setState({ ...App.homeView, infoModalVisible: false })}
                     mouseMode={this.state.mouseMode}
                     onSelectBox={() => this.setState((state) => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
                     sampleVisible={sampleVisible}
@@ -272,7 +280,7 @@ class App extends React.Component {
     onPointHover(x, y) {
         const { viewRe, viewIm, zoom, precision, width, height, sampleVisible } = this.state;
 
-        if(sampleVisible) {
+        if (sampleVisible) {
             const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
             const samplePoint = geo.rectToImaginary(width, height, x, y);
             this.sampler.submit(samplePoint.re, samplePoint.im, precision);
@@ -280,7 +288,7 @@ class App extends React.Component {
     }
 
     onSampleAvailable(sample) {
-        this.setState({sample: sample});
+        this.setState({ sample: sample });
     }
 
     onPan(dx, dy) {
@@ -503,8 +511,8 @@ class SampleDisplay extends React.Component {
         context.strokeStyle = "white";
         context.lineWidth = 2;
 
-        for(let i = 1; i < points.length; i++) {
-            const point0 = points[i-1];
+        for (let i = 1; i < points.length; i++) {
+            const point0 = points[i - 1];
             const point1 = points[i];
             context.beginPath();
             context.moveTo(point0.x, point0.y);
@@ -518,8 +526,8 @@ class SampleDisplay extends React.Component {
         context.strokeStyle = "black";
         context.lineWidth = 1;
 
-        for(let i = points.length - 1; i; i--) {
-            const point = points[i]; 
+        for (let i = points.length - 1; i; i--) {
+            const point = points[i];
             context.beginPath();
             context.arc(point.x, point.y, radius, 0, 2 * Math.PI);
             context.fill();
@@ -780,7 +788,7 @@ class Selector extends React.Component {
 
         // at the moment all zooming is from center point
         // const position = this.getLocalCoordinates(e.center.x, e.center.y);
-        
+
         switch (e.type) {
             case 'pinchstart': {
                 break;

@@ -154,10 +154,15 @@
     z-index: 1;
     top: 125%;
     right: 0%;
+
+    /* fade */
+    opacity: 0;
+    transition: opacity 0.8s ease-in-out;
 }
 
 .navbar-item:hover .navbar-item-tooltip {
     visibility: visible;
+    opacity: 1;
 }
 
 .info-modal {

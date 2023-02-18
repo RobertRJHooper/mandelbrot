@@ -1,11 +1,11 @@
 "use strict";
 
-const getModelGeometry = _.memoize(
-    (re, im, zoom, precision) => new ModelGeometry(re, im, zoom, precision),
-    (...args) => (args.map(x => (x || "null").toString()).join(' '))
-);
+/**
+ * Here are found classes that bridge the user interface and the worker backend
+ */
 
 
+/* Class to handle convertions from screen coordinates to the complex plane */
 class ModelGeometry {
     constructor(center_re, center_im, zoom, precision) {
         this.A = getArithmetic(precision);
@@ -94,6 +94,14 @@ class ModelGeometry {
         return { left: left, top: top };
     }
 }
+
+/**
+ * Memoized helper function to get a ModelGeometry class
+ */
+const getModelGeometry = _.memoize(
+    (re, im, zoom, precision) => new ModelGeometry(re, im, zoom, precision),
+    (...args) => (args.map(x => (x || "null").toString()).join(' '))
+);
 
 /* class to handle communication with workers */
 class PanelsClient {
