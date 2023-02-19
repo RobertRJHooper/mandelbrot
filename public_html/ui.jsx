@@ -104,6 +104,9 @@ class App extends React.Component {
                 this.hideUserInterface();
             }
         };
+
+        // reset focus - so mobile tooltips disappear after a menu item is clicked
+        this.resetFocus = () => this.container.current && this.container.current.focus();
     }
 
     // outer render before dimensions are known
@@ -169,11 +172,11 @@ class App extends React.Component {
                 />
 
                 <Navbar
-                    onReset={() => this.setState(App.homeView)}
+                    onReset={() => this.setState(App.homeView) && this.resetFocus()}
                     mouseMode={this.state.mouseMode}
-                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
+                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' })) && this.resetFocus()}
                     sampleVisible={sampleVisible}
-                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible }))}
+                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible })) && this.resetFocus()}
                     visible={userInterfaceVisible}
                 />
             </div>
