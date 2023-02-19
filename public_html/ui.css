@@ -2,8 +2,6 @@
     position: relative;
     width: 100%;
     height: 100%;
-
-    /* tooltip is clipped */
     overflow: hidden;
 }
 
@@ -24,9 +22,6 @@
     z-index: -1;
     width: 100%;
     height: 100%;
-
-    font-family: monospace;
-    font-size: 0.75em;
 }
 
 .statistics {
@@ -36,12 +31,12 @@
     z-index: -1;
 
     font-family: monospace;
-    backdrop-filter: blur(15px);
+    backdrop-filter: blur(20px);
     color: #fff;
 
     margin: 5px;
     padding: 5px;
-    border-radius: 6px;
+    border-radius: 10px;
 
     /* transitions */
     opacity: 0;
@@ -64,10 +59,7 @@
     margin: -0.2em;
     border: 0.2em solid black;
     box-shadow: 0 0 0.1em 0.2em lightgray;
-    opacity: 70%;
-
-    /* transparent */
-    background-color: rgba(0, 0, 0, 0);
+    background-color: rgba(0, 0, 0, 0.2);   
 }
 
 .grabbable {
@@ -94,7 +86,8 @@
     display: flex;
     flex-direction: row;
 
-    /* transitions */
+    /* transitions: the opacity is set to visible
+    by the app any time the mouse is moved etc */
     opacity: 0;
     transition: opacity 0.5s ease-out;
 }

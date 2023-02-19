@@ -3,13 +3,11 @@ reform functions comments
 
 Features to make:
 add firefox prefixes webkit to css
-add scroll wheel zoom - using a library?
 make stats accurate with multiple workers
-set focus on main div (away from nav bar etc on home click, box selection, sample mode)
-
-maybes:
 add cross to sampler point and make the first point blue
 allow click to fix sampler point
+
+maybes:
 limits to size of caches - clear points two screens away from center panel
 add more bulbs
 restrict cpu usage by mem
@@ -23,8 +21,10 @@ javascript modules - how to with comments
 github releases mechanism for continous deployment
 convert numbered points to html elements so they zoom properly
 time limiting
+set focus on main div (away from nav bar etc on home click, box selection, sample mode)
 
 done:
+add scroll wheel zoom - using a library?
 make a info display area that appears on touches or mouse movement
 add stats to info panel
 add iterations counter on main display

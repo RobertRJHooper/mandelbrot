@@ -7,9 +7,14 @@ class App extends React.Component {
      * Fully zoomed out view of mandelbrot set
      */
     static homeView = {
-        viewRe: "0",
-        viewIm: "0",
-        zoom: "220",
+        // complex coordinates of the center of the view
+        // The initial value is a beautiful point. These are overwritten if
+        // values are specified in the URL parameters
+        viewRe: "-0.6376090432511038",
+        viewIm: "0.2690716860879459",
+
+        // zoom is the number of pixels per unit in the imaginary plane
+        zoom: "628",
     };
 
     /**
@@ -21,15 +26,7 @@ class App extends React.Component {
         super(props);
 
         this.state = {
-
-            // complex coordinates of the center of the view
-            // The initial value is a beautiful point. These are overwritten if
-            // values are specified in the URL parameters
-            viewRe: "-1.1875148812925351",
-            viewIm: "-0.3589885775655382",
-
-            // zoom is the number of pixels per unit in the imaginary plane
-            zoom: "1062",
+            ...App.homeView,
 
             // number of significant figures that high precision number have
             // for low values / not specified: regular Javascript numbers are used
@@ -863,7 +860,7 @@ class Selector extends React.Component {
         this.setState(state => {
             const wheelZoom = state.wheelZoom * Math.pow(1.3, deltaY);
             this.props.onZoomChange(wheelZoom);
-            return {wheelZoom: wheelZoom };
+            return { wheelZoom: wheelZoom };
         });
         this.terminateWheelZoom();
     }
@@ -961,6 +958,7 @@ class StatisticsDisplay extends React.Component {
         return (
             <div className={visible ? "statistics visible" : "statistics"}>
                 <p>
+                    <b>Generator</b><br />
                     z<sub>n+1</sub> = (z<sub>n</sub>)<sup>2</sup> + c
                 </p>
                 <p>
