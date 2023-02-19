@@ -171,9 +171,9 @@ class App extends React.Component {
                 <Navbar
                     onReset={() => this.setState(App.homeView)}
                     mouseMode={this.state.mouseMode}
-                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' })) }
+                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
                     sampleVisible={sampleVisible}
-                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible })) }
+                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible }))}
                     visible={userInterfaceVisible}
                 />
             </div>
@@ -620,12 +620,20 @@ class Selector extends React.Component {
         mouseMode: 'pan',
     }
 
+    /**
+     * Time between last wheel event and reporting end of zoom
+     */
+    static wheelZoomTerminationDelay = 1000;
+
     constructor(props) {
         super(props);
 
         this.state = {
             startPoint: null,
             currentPoint: null,
+
+            // current wheel zoom factor
+            wheelZoom: 1,
         };
 
         // selection surface - this matches the mandelbrot canvas
@@ -636,10 +644,20 @@ class Selector extends React.Component {
         this.divListening = null;
 
         // touch events listening via Hammer.js
-        this.hammer = null; // https://hammerjs.github.io/api/
+        this.hammer = null;
+
+        // wheel events via hamster.js
+        this.hamster = null;
+
+        // terminate wheel zoom
+        this.terminateWheelZoom = _.debounce(() => {
+            this.props.onZoomComplete && this.props.onZoomComplete();
+            this.setState({ wheelZoom: 1 });
+        }, Selector.wheelZoomTerminationDelay);
 
         // input events handlers
         this.handleHover = this.handleHover.bind(this);
+        this.handleWheel = this.handleWheel.bind(this);
         this.handlePan = this.handlePan.bind(this);
         this.handlePinch = this.handlePinch.bind(this);
         this.handlePress = this.handlePress.bind(this);
@@ -687,15 +705,24 @@ class Selector extends React.Component {
             hammer.on('pinchstart pinchmove pinchend pinchcancel', this.handlePinch);
             hammer.on('press', this.handlePress);
 
+            const hamster = this.hamster = new Hamster(this.divListening);
+            hamster.wheel(this.handleWheel);
+
             // standard listener for hovering event and stroll wheel
-            this.divListening.addEventListener('mousemove', this.handleHover);
             this.divListening.addEventListener('mousemove', this.handleHover);
         }
     }
 
     removeListeners() {
-        this.hammer && this.hammer.destroy();
-        this.hammer = null;
+        if (this.hammer) {
+            this.hammer.destroy();
+            this.hammer = null;
+        }
+
+        if (this.hamster) {
+            this.hamster.unwheel();
+            this.hamster = null;
+        }
 
         if (this.divListening) {
             this.divListening.removeEventListener('mousemove', this.handleHover);
@@ -830,6 +857,15 @@ class Selector extends React.Component {
                 break;
             }
         }
+    }
+
+    handleWheel(event, delta, deltaX, deltaY) {
+        this.setState(state => {
+            const wheelZoom = state.wheelZoom * Math.pow(1.3, deltaY);
+            this.props.onZoomChange(wheelZoom);
+            return {wheelZoom: wheelZoom };
+        });
+        this.terminateWheelZoom();
     }
 
     handlePress(e) {
