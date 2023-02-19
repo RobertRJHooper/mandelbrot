@@ -48,12 +48,12 @@ class App extends React.Component {
             // This is reset and baked into center at the end of a pinch
             postZoom: 1,
 
+            // statistics from main calculation workers
+            statistics: null,
+
             // (complex) point to display runout sample
             sampleVisible: false,
             sample: null,
-
-            // popup info box
-            infoModalVisible: false,
         }
 
         // keep track of container dimensions
@@ -66,20 +66,123 @@ class App extends React.Component {
                     this.pullContainerDimensions();
             }
         });
-        
+
         // callbacks for child elements
         this.onBoxSelect = this.onBoxSelect.bind(this);
         this.onPointHover = this.onPointHover.bind(this);
         this.onPan = this.onPan.bind(this);
         this.onZoomChange = this.onZoomChange.bind(this);
         this.onZoomComplete = this.onZoomComplete.bind(this);
-        
+        this.onStatisticsAvailable = this.onStatisticsAvailable.bind(this);
+
         // bind functions that can be passed as callbacks
         this.pullStateFromURL = this.pullStateFromURL.bind(this);
         this.pushStateToURLDebounced = _.debounce(this.pushStateToURL.bind(this), 1000);
 
         // client for getting single point samples
         this.sampler = new SampleClient(this.onSampleAvailable.bind(this));
+    }
+
+    // outer render before dimensions are known
+    render() {
+        const { width, height } = this.state;
+
+        return (
+            <div className="app" ref={this.container}>
+                {width && height && this.renderContent()}
+            </div>
+        );
+    }
+
+    // inner render when we know the container dimensions
+    renderContent() {
+        const {
+            viewRe,
+            viewIm,
+            zoom,
+            precision,
+            postZoom,
+            width,
+            height,
+            statistics,
+            sample,
+            sampleVisible,
+        } = this.state;
+
+        return (
+            <div>
+                <MandelbrotSet
+                    viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
+                    width={width}
+                    height={height}
+                    postZoom={postZoom}
+                    onStatisticsAvailable={this.onStatisticsAvailable}
+                />
+
+                {sampleVisible && (postZoom == 1) &&
+                    <SampleDisplay
+                        viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
+                        width={width}
+                        height={height}
+                        sample={sample}
+                    />
+                }
+
+                <StatisticsDisplay
+                    viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
+                    statistics={statistics}
+                    sample={sample}
+                />
+
+                <Selector
+                    mouseMode={this.state.mouseMode}
+                    onPointHover={this.onPointHover}
+                    onBoxSelect={this.onBoxSelect}
+                    onPan={this.onPan}
+                    onZoomChange={this.onZoomChange}
+                    onZoomComplete={this.onZoomComplete}
+                />
+
+                <Navbar
+                    onReset={() => this.setState(App.homeView)}
+                    mouseMode={this.state.mouseMode}
+                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
+                    sampleVisible={sampleVisible}
+                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible }))}
+                />
+            </div>
+        );
+    }
+
+    componentDidMount() {
+        this.resizeObserver.observe(this.container.current);
+
+        // get dimensions for the drawing canvas
+        this.pullContainerDimensions();
+
+        // monitor URL for changes to feed into state
+        window.addEventListener('popstate', this.pullStateFromURL);
+
+        // initiate sampler system
+        this.sampler.initiate();
+    }
+
+    componentWillUnmount() {
+        this.resizeObserver.disconnect();
+        window.removeEventListener('popstate', this.pullStateFromURL);
+        this.sampler.terminate();
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        const { viewRe, viewIm, zoom, precision } = this.state;
+
+        const viewChanged = 0
+            || prevState.viewRe != viewRe
+            || prevState.viewIm != viewIm
+            || prevState.zoom != zoom
+            || prevState.precision != precision;
+
+        if (viewChanged) this.pushStateToURLDebounced();
     }
 
     /* get viewbox as specified in the URL */
@@ -177,105 +280,9 @@ class App extends React.Component {
         });
     }
 
-    // outer render before dimensions are known
-    render() {
-        const { width, height } = this.state;
-
-        return (
-            <div className="app" ref={this.container}>
-                {width && height && this.renderContent()}
-            </div>
-        );
-    }
-
-    // inner render when we know the container dimensions
-    renderContent() {
-        const {
-            viewRe,
-            viewIm,
-            zoom,
-            precision,
-            postZoom,
-            width,
-            height,
-            sample,
-            sampleVisible,
-            infoModalVisible
-        } = this.state;
-
-        return (
-            <div>
-                <MandelbrotSet
-                    viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
-                    width={width}
-                    height={height}
-                    postZoom={postZoom}
-                />
-
-                {sampleVisible && !infoModalVisible && (postZoom == 1) &&
-                    <SampleDisplay
-                        viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
-                        width={width}
-                        height={height}
-                        sample={sample}
-                    />
-                }
-
-                <Selector
-                    mouseMode={this.state.mouseMode}
-                    onPointHover={this.onPointHover}
-                    onBoxSelect={this.onBoxSelect}
-                    onPan={this.onPan}
-                    onZoomChange={this.onZoomChange}
-                    onZoomComplete={this.onZoomComplete}
-                />
-
-                <Navbar
-                    onReset={() => this.setState({ ...App.homeView, infoModalVisible: false })}
-                    mouseMode={this.state.mouseMode}
-                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
-                    sampleVisible={sampleVisible}
-                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible }))}
-                    onInfoToggle={() => this.setState(state => ({ infoModalVisible: !state.infoModalVisible }))}
-                />
-
-                <InfoModal
-                    visible={infoModalVisible}
-                    onCloseClick={() => this.setState({ infoModalVisible: false })}
-                />
-            </div>
-        );
-    }
-
-    componentDidMount() {
-        this.resizeObserver.observe(this.container.current);
-
-        // get dimensions for the drawing canvas
-        this.pullContainerDimensions();
-
-        // monitor URL for changes to feed into state
-        window.addEventListener('popstate', this.pullStateFromURL);
-
-        // initiate sampler system
-        this.sampler.initiate();
-    }
-
-    componentWillUnmount() {
-        this.resizeObserver.disconnect();
-        window.removeEventListener('popstate', this.pullStateFromURL);
-        this.sampler.terminate();
-    }
-
-    componentDidUpdate(prevProps, prevState) {
-        const { viewRe, viewIm, zoom, precision } = this.state;
-
-        const viewChanged = 0
-            || prevState.viewRe != viewRe
-            || prevState.viewIm != viewIm
-            || prevState.zoom != zoom
-            || prevState.precision != precision;
-
-        if (viewChanged) this.pushStateToURLDebounced();
+    /* callback to receive statistics from calculation workers */
+    onStatisticsAvailable(statistics) {
+        this.setState(state => state.statistics != statistics ? { statistics: statistics } : {});
     }
 
     onPointHover(x, y) {
@@ -313,7 +320,7 @@ class App extends React.Component {
         this.setState({ postZoom: scale });
     }
 
-    /* bake postZoom into base zoom */
+    /* callback that bakes postZoom into base zoom */
     onZoomComplete() {
         this.setState((state, props) => {
             const { viewRe, viewIm, zoom, precision, postZoom } = state;
@@ -322,8 +329,9 @@ class App extends React.Component {
         });
     }
 
+    /* callback when a zoom box is selected by the selector */
     onBoxSelect(box) {
-        this.setState((state, props) => {
+        this.setState(state => {
             const { viewRe, viewIm, zoom, precision, width, height } = state;
             const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
 
@@ -354,8 +362,9 @@ class App extends React.Component {
     }
 }
 
+/* class to calculate and display a portion of mandelbrot set */
 class MandelbrotSet extends React.Component {
-    static framePeriod = 100; // frame throlling in ms
+    static framePeriod = 200; // frame throlling in ms
 
     static defaultProps = {
         width: 400,
@@ -423,10 +432,15 @@ class MandelbrotSet extends React.Component {
     animationFrame(timestamp) {
         const throttlePassed = !this.lastFrameTime || (this.lastFrameTime + MandelbrotSet.framePeriod < timestamp);
 
+        // get latest info from workers
         if (this.running && throttlePassed && this.canvas.current && this.model) {
             const { snapshots, update } = this.model.flush();
             this.drawSnaps(snapshots, update);
             this.lastFrameTime = timestamp;
+
+            // pass statistics back to parent
+            const { onStatisticsAvailable } = this.props;
+            onStatisticsAvailable && onStatisticsAvailable(this.model.statistics);
         }
 
         // animation loop
@@ -476,15 +490,8 @@ class MandelbrotSet extends React.Component {
     }
 }
 
+/* class to display the runout of a single point under the mandelbrot iteration */
 class SampleDisplay extends React.Component {
-    static floatFormat = new Intl.NumberFormat(
-        "us-en",
-        {
-            signDisplay: 'always',
-            minimumFractionDigits: 15,
-            maximumFractionDigits: 15
-        }).format;
-
     constructor(props) {
         super(props);
         this.canvas = React.createRef();
@@ -537,36 +544,9 @@ class SampleDisplay extends React.Component {
     }
 
     render() {
-        const { viewRe, viewIm, zoom, precision, width, height, sample } = this.props;
-        const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
-
-        // no sample supplied
+        const { width, height, sample } = this.props;
         if (!sample) return;
-
-        // put the tooptip at the initial point
-        const pointPosition = geo.imaginaryToRect(width, height, sample.re, sample.im);
-        const escape = sample.determined && (sample.escapeAge !== null);
-
-        return (
-            <div>
-                {/* numbered points and joining line */}
-                <canvas ref={this.canvas} width={width} height={height}></canvas>
-
-                {/* tooltip */}
-                <div className="sample-infobox" style={{ left: pointPosition.x, top: pointPosition.y }}>
-                    <p>{SampleDisplay.floatFormat(sample.re)}</p>
-                    <p>{SampleDisplay.floatFormat(sample.im)}i</p>
-                    <hr></hr>
-                    <p>
-                        z<sub>n</sub>
-                        <span className={escape ? 'sample-escaped' : 'sample-bounded'}>
-                            {escape ? " escapes " : " remains bounded"}
-                        </span>
-                        {escape ? `at n=${sample.escapeAge}` : ""}
-                    </p>
-                </div>
-            </div>
-        );
+        return <canvas ref={this.canvas} width={width} height={height}></canvas>;
     }
 
     componentDidMount() {
@@ -815,15 +795,16 @@ class Selector extends React.Component {
     }
 }
 
+/* Class used to display the navigation buttons and report back, using callback functions, when the user makes input */
 class Navbar extends React.Component {
     static defaultProps = {
         mouseMode: 'pan', // 'pan' and 'box-select' mouse mode
         sampleVisible: false,
 
+        // callback functions
         onReset: null,
         onSelectBox: null,
         onSampleToggle: null,
-        onInfoToggle: null,
     }
 
     constructor(props) {
@@ -855,91 +836,79 @@ class Navbar extends React.Component {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
                     </svg>
-                    <span className="navbar-item-tooltip">Show point samples</span>
+                    <span className="navbar-item-tooltip">Select point sample</span>
                 </div>
 
-                <div className="navbar-item" onClick={this.props.onInfoToggle}>
-                    {/* info icon */}
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
-                        <path d="m9.708 6.075-3.024.379-.108.502.595.108c.387.093.464.232.38.619l-.975 4.577c-.255 1.183.14 1.74 1.067 1.74.72 0 1.554-.332 1.933-.789l.116-.549c-.263.232-.65.325-.905.325-.363 0-.494-.255-.402-.704l1.323-6.208Zm.091-2.755a1.32 1.32 0 1 1-2.64 0 1.32 1.32 0 0 1 2.64 0Z" />
-                    </svg>
-                    <span className="navbar-item-tooltip">Information</span>
-                </div>
             </div>
 
         );
     }
 }
 
-class InfoModal extends React.Component {
-    static defaultProps = {
-        visible: false,
-        onCloseClick: null,
-    }
+/* Class used to display dynamic information */
+class StatisticsDisplay extends React.Component {
+    static floatFormat = new Intl.NumberFormat(
+        "us-en",
+        {
+            signDisplay: 'always',
+            minimumFractionDigits: 15,
+            maximumFractionDigits: 15
+        }).format;
 
-    constructor(props) {
-        super(props);
-        this.backdrop = React.createRef();
-        this.onClick = this.onClick.bind(this);
+    static defaultProps = {
+        viewRe: "0",
+        viewIm: "0",
+        zoom: "100",
+        iteration: 0,
+
+        // sample as retuned from SampleClient callback
+        sample: null,
     }
 
     render() {
+        const { viewRe, viewIm, zoom, statistics, width, height, sample } = this.props;
+        const escape = sample && sample.determined && (sample.escapeAge !== null);
+
+        /*
+        const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
+        if (!sample) return;
+
+        // put the tooptip at the initial point
+        const pointPosition = geo.imaginaryToRect(width, height, sample.re, sample.im);
+        */
+
         return (
-            <div ref={this.backdrop} className="info-modal" style={this.props.visible ? {} : { display: 'none' }}>
-                <div className="info-modal-content">
-                    {/* modal close X button */}
-                    <span
-                        className="info-modal-close"
-                        onClick={() => this.props.onCloseClick && this.props.onCloseClick()}>
-                        &times;
-                    </span>
-                    {/* start of modal content */}
-                    <h1>Mandelbrot Set Explorer</h1>
-                    <p>
-                        The Mandelbrot set is the set of complex numbers <var>c</var> for which the
-                        function <var>f<sub>c</sub>(z)=z<sup>2</sup>+c</var> does not diverge to infinity
-                        when iterated from <var>z=0</var>. This app displays the Mandelbrot set and
-                        allows zooming for exploration.
-                    </p>
-                    <p>
-                        When a point is in Mandelbrot Set, the path will remain bounded.
-                        When a point is not in the set, the path will eventually escape
-                        (<var>|z<sub>n</sub>| &gt;= 2</var>) and this implies that
-                        (<var>z<sub>n</sub></var>) will be unbounded as <var>n</var> increases.
-                        Black points in the image are points in the set. Points outside the set are
-                        displayed in various colour. When two points have the same escape iteration they have
-                        the same colour.
-                    </p>
-                    <p>
-                        The home button returns the view to the zoomed-out starting level.
-                        The initial value (<var>z<sub>0</sub></var>)
-                        and the path of the iterations (<var>z<sub>n</sub></var>) of a single point
-                        can be viewed by selecting the arrow button and hovering/selecting a point.
-                    </p>
-                    <p>
-                        The set is fractal in nature meaning that shapes seen at one zoom level will recur at higher
-                        zoom levels continuing indefinitely.
-                    </p>
-                    <p>
-                        More infomation is available on the Wikipedia page: <a href="https://en.wikipedia.org/wiki/Mandelbrot_set">https://en.wikipedia.org/wiki/Mandelbrot_set</a>
-                    </p>
-                    {/* end of modal content */}
-                </div>
-            </div >
+            <div className="statistics">
+                <p>
+                    <b>View center (c)</b><br />
+                    {StatisticsDisplay.floatFormat(viewRe)}<br />
+                    {StatisticsDisplay.floatFormat(viewIm)}i<br />
+                </p>
+
+                <p>
+                    <b>Zoom (px/unit)</b><br />
+                    {Math.round(zoom.toString())}<br />
+                </p>
+
+                <p>
+                    <b>Iteration</b><br />
+                    {statistics && statistics.iteration || 0}<br />
+                </p>
+
+                <p>
+                    <b>Sample point (c)</b><br />
+                    {StatisticsDisplay.floatFormat(sample && sample.re || 0)}<br />
+                    {StatisticsDisplay.floatFormat(sample && sample.im || 0)}i<br />
+
+                    z<sub>n</sub> {escape ?
+                        <span>escapes at n={sample && sample.escapeAge || 0}</span>
+                        :
+                        <span>remains bounded</span>
+                    }
+                </p>
+            </div>
         );
     }
-
-    componentDidMount() {
-        window.addEventListener("click", this.onClick);
-    }
-
-    componentWillUnmount() {
-        window.removeEventListener("click", this.onClick);
-    }
-
-    onClick(event) {
-        if (event.target == this.backdrop.current) {
-            this.props.onCloseClick && this.props.onCloseClick();
-        }
-    }
 }
+
+

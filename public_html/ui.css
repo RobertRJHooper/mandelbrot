@@ -29,37 +29,19 @@
     font-size: 0.75em;
 }
 
-.sample-bounded {
-    color: green;
-    fill: green;
-    stroke: green;
-}
-
-.sample-escaped {
-    color: red;
-    fill: red;
-    stroke: red;
-}
-
-.sample-infobox {
+.statistics {
     position: absolute;
-    /* position set by the app */
+    top: 0;
+    left: 0;
+    z-index: -1;
 
-    background-color: black;
+    font-family: monospace;
+    backdrop-filter: blur(15px);
     color: #fff;
-    text-align: left;
-    margin: 15px;
+
+    margin: 5px;
+    padding: 5px;
     border-radius: 6px;
-}
-
-
-.sample-infobox p {
-    margin: 2px;
-}
-
-.sample-infobox hr {
-    border-color: grey;
-    margin: 1px 1px 0 0;
 }
 
 .selector {

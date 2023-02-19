@@ -183,7 +183,7 @@ class Panels {
         this.activePanels = [];
 
         // counter
-        this.iterations = 0;
+        this.iteration = 0;
     }
 
     /* determine active panel coordinates around a center */
@@ -244,7 +244,7 @@ class Panels {
     // iterate all current panels
     iterate() {
         for (const panel of this.activePanels) panel.iterate();
-        this.iterations += 1;
+        this.iteration += 1;
     }
 
     // return a list of bitmaps for updated (dirty) panels since last flush

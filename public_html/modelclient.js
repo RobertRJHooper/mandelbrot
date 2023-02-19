@@ -123,6 +123,11 @@ class PanelsClient {
 
         // flag if the next flush is from blank. Otherwise, it is cumulative on previous flushes 
         this.flushFromBlank = true;
+
+        // worker statistics - these are updated periodically and each
+        // statistics object is static once created
+        // so equality can be tested on the object reference
+        this.statistics = {};
     }
 
     initiate() {
@@ -214,21 +219,22 @@ class PanelsClient {
     }
 
     workerMessage(message) {
-        const { reference, iterations, snapshots } = message.data;
+        const { reference, snapshots, statistics } = message.data;
 
         if (reference != this.reference) {
             console.debug("expired snaps received from worker");
             return;
         }
 
-        for (const snapshot of snapshots) {
+        // deal with snapshots
+        for (const snapshot of snapshots || []) {
             const key = `${snapshot.panelX} ${snapshot.panelY}`;
             this.updates.set(key, snapshot);
             this.snapshots.set(key, snapshot);
         }
 
-        // diagnostic info
-        this.iterations = iterations;
+        // deal with statistics
+        if(statistics) this.statistics = statistics;
     }
 
     /* get updates since last flush */

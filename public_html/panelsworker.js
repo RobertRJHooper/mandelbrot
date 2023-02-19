@@ -52,7 +52,7 @@ function setView() {
   console.debug('setting view at', re, im);
   console.debug('setting view width', width);
   console.debug('setting view height', height);
-  
+
   const active = panels.getPanelsForView(
     Arithmetic.N(re),
     Arithmetic.N(im),
@@ -115,19 +115,28 @@ async function loop() {
     setView();
     return true;
   }
-  
+
   // get timestamp to throttle sending updates and iterating points
   const timestamp = Date.now();
   const active = current.timeToIdle > timestamp;
 
   // post dirty panels to the master
   if (active && timestamp > current.frameTime + frameThrottlePeriod) {
-    const snapshots = await current.panels.flush();
+    const statistics = {
+      iteration: current.panels.iteration,
+    };
 
+    // post statistics
+    postMessage({
+      reference: current.reference,
+      statistics: statistics,
+    });
+
+    // post panel updates
+    const snapshots = await current.panels.flush();
     if (snapshots.length) {
       postMessage({
         reference: current.reference,
-        iterations: current.panels.iterations,
         snapshots: snapshots,
       },
         snapshots.map(s => s.bitmap)
