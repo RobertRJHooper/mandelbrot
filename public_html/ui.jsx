@@ -53,10 +53,6 @@ class App extends React.Component {
             // statistics from main calculation workers
             statistics: null,
 
-            // (complex) point to display runout sample
-            sampleVisible: false,
-            sample: null,
-
             // flag that shows the statistics and navbar
             // when set to false the stats and navbar will fade after
             // a few seconds via style sheet mechanism
@@ -87,7 +83,7 @@ class App extends React.Component {
         this.pushStateToURLDebounced = _.debounce(this.pushStateToURL.bind(this), 1000);
 
         // client for getting single point samples
-        this.sampler = new SampleClient(this.onSampleAvailable.bind(this));
+        // this.sampler = new SampleClient(this.onSampleAvailable.bind(this));
 
         // auto hide userinterface when nothing happens
         this.hideUserInterface = _.debounce(
@@ -125,8 +121,6 @@ class App extends React.Component {
             width,
             height,
             statistics,
-            sample,
-            sampleVisible,
             userInterfaceVisible,
         } = this.state;
 
@@ -140,19 +134,10 @@ class App extends React.Component {
                     onStatisticsAvailable={this.onStatisticsAvailable}
                 />
 
-                {sampleVisible && (postZoom == 1) &&
-                    <SampleDisplay
-                        viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
-                        width={width}
-                        height={height}
-                        sample={sample}
-                    />
-                }
-
                 <StatisticsDisplay
                     viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
                     statistics={statistics}
-                    sample={sample}
+                    // sample={sample}
                     visible={userInterfaceVisible}
                 />
 
@@ -169,8 +154,6 @@ class App extends React.Component {
                     onReset={() => this.setState(App.homeView)}
                     mouseMode={this.state.mouseMode}
                     onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
-                    sampleVisible={sampleVisible}
-                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible }))}
                     visible={userInterfaceVisible}
                 />
             </div>
@@ -187,7 +170,7 @@ class App extends React.Component {
         window.addEventListener('popstate', this.pullStateFromURL);
 
         // initiate sampler system
-        this.sampler.initiate();
+        // this.sampler.initiate();
 
         // show interface initially
         this.showUserInterface();
@@ -196,7 +179,7 @@ class App extends React.Component {
     componentWillUnmount() {
         this.resizeObserver.disconnect();
         window.removeEventListener('popstate', this.pullStateFromURL);
-        this.sampler.terminate();
+        // this.sampler.terminate();
     }
 
     componentDidUpdate(prevProps, prevState) {
@@ -312,20 +295,7 @@ class App extends React.Component {
     }
 
     onPointHover(x, y) {
-        const { viewRe, viewIm, zoom, precision, width, height, sampleVisible } = this.state;
-
-        if (sampleVisible) {
-            const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
-            const samplePoint = geo.rectToImaginary(width, height, x, y);
-            this.sampler.submit(samplePoint.re, samplePoint.im, precision);
-        }
-
-        // show user interface for a while
         this.showUserInterface();
-    }
-
-    onSampleAvailable(sample) {
-        this.setState({ sample: sample });
     }
 
     onPan(dx, dy) {
@@ -875,13 +845,12 @@ class Navbar extends React.Component {
     static defaultProps = {
         visible: false,
 
-        mouseMode: 'pan', // 'pan' and 'box-select' mouse mode
-        sampleVisible: false,
+        // 'pan' and 'box-select' mouse mode
+        mouseMode: 'pan',
 
         // callback functions
         onReset: null,
         onSelectBox: null,
-        onSampleToggle: null,
     }
 
     constructor(props) {
@@ -891,13 +860,11 @@ class Navbar extends React.Component {
     render() {
         const {
             visible,
-            sampleVisible,
             mouseMode,
 
             // callbacks
             onReset,
             onSelectBox,
-            onSampleToggle,
         } = this.props;
 
         return (
@@ -916,16 +883,7 @@ class Navbar extends React.Component {
                         <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293l6-6Z" />
                     </svg>
                 </div>
-
-                <div className={sampleVisible ? "navbar-item navbar-item-active" : "navbar-item"} onClick={onSampleToggle}>
-                    {/* cursor icon */}
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
-                        <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
-                    </svg>
-                </div>
-
             </div>
-
         );
     }
 }
@@ -945,15 +903,10 @@ class StatisticsDisplay extends React.Component {
         viewRe: "0",
         viewIm: "0",
         zoom: "100",
-        iteration: 0,
-
-        // sample as retuned from SampleClient callback
-        sample: null,
     }
 
     render() {
-        const { visible, viewRe, viewIm, zoom, statistics, sample } = this.props;
-        const escape = sample && sample.determined && (sample.escapeAge !== null);
+        const { visible, viewRe, viewIm, zoom, statistics } = this.props;
 
         return (
             <div className={visible ? "statistics visible" : "statistics"}>
@@ -975,18 +928,6 @@ class StatisticsDisplay extends React.Component {
                 <p>
                     <b>Iteration (n)</b><br />
                     {statistics && statistics.iteration || 0}<br />
-                </p>
-
-                <p>
-                    <b>Sample point (c)</b><br />
-                    {StatisticsDisplay.floatFormat(sample && sample.re || 0)}<br />
-                    {StatisticsDisplay.floatFormat(sample && sample.im || 0)}i<br />
-
-                    z<sub>n</sub> {escape ?
-                        <span>escapes at n={sample && sample.escapeAge || 0}</span>
-                        :
-                        <span>remains bounded</span>
-                    }
                 </p>
             </div>
         );
