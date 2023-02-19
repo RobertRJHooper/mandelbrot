@@ -12,6 +12,11 @@ class App extends React.Component {
         zoom: "220",
     };
 
+    /**
+     * Time delay to show user interface before auto-hiding
+     */
+    static userInterfaceHideDelay = 3000;
+
     constructor(props) {
         super(props);
 
@@ -54,6 +59,11 @@ class App extends React.Component {
             // (complex) point to display runout sample
             sampleVisible: false,
             sample: null,
+
+            // flag that shows the statistics and navbar
+            // when set to false the stats and navbar will fade after
+            // a few seconds via style sheet mechanism
+            userInterfaceVisible: false,
         }
 
         // keep track of container dimensions
@@ -81,6 +91,19 @@ class App extends React.Component {
 
         // client for getting single point samples
         this.sampler = new SampleClient(this.onSampleAvailable.bind(this));
+
+        // auto hide userinterface when nothing happens
+        this.hideUserInterface = _.debounce(
+            () => this.setState({ userInterfaceVisible: false }),
+            App.userInterfaceHideDelay
+        );
+
+        this.showUserInterface = () => {
+            if (!this.state.userInterfaceVisible) {
+                this.setState({ userInterfaceVisible: true });
+                this.hideUserInterface();
+            }
+        };
     }
 
     // outer render before dimensions are known
@@ -107,6 +130,7 @@ class App extends React.Component {
             statistics,
             sample,
             sampleVisible,
+            userInterfaceVisible,
         } = this.state;
 
         return (
@@ -132,6 +156,7 @@ class App extends React.Component {
                     viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
                     statistics={statistics}
                     sample={sample}
+                    visible={userInterfaceVisible}
                 />
 
                 <Selector
@@ -149,6 +174,7 @@ class App extends React.Component {
                     onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
                     sampleVisible={sampleVisible}
                     onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible }))}
+                    visible={userInterfaceVisible}
                 />
             </div>
         );
@@ -165,6 +191,9 @@ class App extends React.Component {
 
         // initiate sampler system
         this.sampler.initiate();
+
+        // show interface initially
+        this.showUserInterface();
     }
 
     componentWillUnmount() {
@@ -174,14 +203,14 @@ class App extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { viewRe, viewIm, zoom, precision } = this.state;
+        const { viewRe, viewIm, zoom, precision, showUserInterface } = this.state;
 
+        // update the URL
         const viewChanged = 0
             || prevState.viewRe != viewRe
             || prevState.viewIm != viewIm
             || prevState.zoom != zoom
             || prevState.precision != precision;
-
         if (viewChanged) this.pushStateToURLDebounced();
     }
 
@@ -293,6 +322,9 @@ class App extends React.Component {
             const samplePoint = geo.rectToImaginary(width, height, x, y);
             this.sampler.submit(samplePoint.re, samplePoint.im, precision);
         }
+
+        // show user interface for a while
+        this.showUserInterface();
     }
 
     onSampleAvailable(sample) {
@@ -314,6 +346,9 @@ class App extends React.Component {
 
             return { viewRe: center.re, viewIm: center.im };
         });
+
+        // show user interface for a while
+        this.showUserInterface();
     }
 
     onZoomChange(scale) {
@@ -327,6 +362,9 @@ class App extends React.Component {
             const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
             return { zoom: geo.magnify(postZoom), postZoom: 1 };
         });
+
+        // show user interface for a while
+        this.showUserInterface();
     }
 
     /* callback when a zoom box is selected by the selector */
@@ -359,6 +397,9 @@ class App extends React.Component {
                 mouseMode: 'pan',
             }
         });
+
+        // show user interface for a while
+        this.showUserInterface();
     }
 }
 
@@ -646,7 +687,8 @@ class Selector extends React.Component {
             hammer.on('pinchstart pinchmove pinchend pinchcancel', this.handlePinch);
             hammer.on('press', this.handlePress);
 
-            // standard listener for hovering event
+            // standard listener for hovering event and stroll wheel
+            this.divListening.addEventListener('mousemove', this.handleHover);
             this.divListening.addEventListener('mousemove', this.handleHover);
         }
     }
@@ -798,6 +840,8 @@ class Selector extends React.Component {
 /* Class used to display the navigation buttons and report back, using callback functions, when the user makes input */
 class Navbar extends React.Component {
     static defaultProps = {
+        visible: false,
+
         mouseMode: 'pan', // 'pan' and 'box-select' mouse mode
         sampleVisible: false,
 
@@ -812,9 +856,20 @@ class Navbar extends React.Component {
     }
 
     render() {
+        const {
+            visible,
+            sampleVisible,
+            mouseMode,
+
+            // callbacks
+            onReset,
+            onSelectBox,
+            onSampleToggle,
+        } = this.props;
+
         return (
-            <div className="navbar">
-                <div className="navbar-item" onClick={this.props.onReset}>
+            <div className={visible ? "navbar visible" : "navbar"}>
+                <div className="navbar-item" onClick={onReset}>
                     {/* house icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.707 1.5Z" />
@@ -823,7 +878,7 @@ class Navbar extends React.Component {
                     <span className="navbar-item-tooltip">Fully zoom out</span>
                 </div>
 
-                <div className={this.props.mouseMode == 'box-select' ? "navbar-item navbar-item-active" : "navbar-item"} onClick={this.props.onSelectBox} >
+                <div className={mouseMode == 'box-select' ? "navbar-item navbar-item-active" : "navbar-item"} onClick={onSelectBox} >
                     {/* selection square icon to activate box selection */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M2 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM0 2a2 2 0 0 1 3.937-.5h8.126A2 2 0 1 1 14.5 3.937v8.126a2 2 0 1 1-2.437 2.437H3.937A2 2 0 1 1 1.5 12.063V3.937A2 2 0 0 1 0 2zm2.5 1.937v8.126c.703.18 1.256.734 1.437 1.437h8.126a2.004 2.004 0 0 1 1.437-1.437V3.937A2.004 2.004 0 0 1 12.063 2.5H3.937A2.004 2.004 0 0 1 2.5 3.937zM14 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM2 13a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm12 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />
@@ -831,7 +886,7 @@ class Navbar extends React.Component {
                     <span className="navbar-item-tooltip">Zoom to box</span>
                 </div>
 
-                <div className={this.props.sampleVisible ? "navbar-item navbar-item-active" : "navbar-item"} onClick={this.props.onSampleToggle}>
+                <div className={sampleVisible ? "navbar-item navbar-item-active" : "navbar-item"} onClick={onSampleToggle}>
                     {/* cursor icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
@@ -856,6 +911,7 @@ class StatisticsDisplay extends React.Component {
         }).format;
 
     static defaultProps = {
+        visible: false,
         viewRe: "0",
         viewIm: "0",
         zoom: "100",
@@ -866,21 +922,13 @@ class StatisticsDisplay extends React.Component {
     }
 
     render() {
-        const { viewRe, viewIm, zoom, statistics, width, height, sample } = this.props;
+        const { visible, viewRe, viewIm, zoom, statistics, sample } = this.props;
         const escape = sample && sample.determined && (sample.escapeAge !== null);
 
-        /*
-        const geo = getModelGeometry(viewRe, viewIm, zoom, precision);
-        if (!sample) return;
-
-        // put the tooptip at the initial point
-        const pointPosition = geo.imaginaryToRect(width, height, sample.re, sample.im);
-        */
-
         return (
-            <div className="statistics">
+            <div className={visible ? "statistics visible" : "statistics"}>
                 <p>
-                z<sub>n+1</sub> = (z<sub>n</sub>)<sup>2</sup> + c
+                    z<sub>n+1</sub> = (z<sub>n</sub>)<sup>2</sup> + c
                 </p>
                 <p>
                     <b>View center (c)</b><br />
@@ -889,7 +937,7 @@ class StatisticsDisplay extends React.Component {
                 </p>
 
                 <p>
-                    <b>Zoom (px/unit)</b><br />
+                    <b>Zoom (pixels/unit)</b><br />
                     {Math.round(zoom.toString())}<br />
                 </p>
 

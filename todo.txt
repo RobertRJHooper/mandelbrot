@@ -2,6 +2,7 @@ Next todo:
 reform functions comments
 
 Features to make:
+add firefox prefixes webkit to css
 
 maybes:
 add cross to sampler point and make the first point blue
