@@ -139,9 +139,9 @@ class Panel {
                 imageData[i + 3] = 255;
             } else if (point.determined) {
                 // points determined by formula rather than iteration
-                imageData[i + 0] = 255;
+                imageData[i + 0] = 0;
                 imageData[i + 1] = 0;
-                imageData[i + 2] = 255;
+                imageData[i + 2] = 0;
                 imageData[i + 3] = 255;
             }
         });
