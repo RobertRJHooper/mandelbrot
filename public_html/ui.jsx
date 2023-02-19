@@ -25,11 +25,11 @@ class App extends React.Component {
             // complex coordinates of the center of the view
             // The initial value is a beautiful point. These are overwritten if
             // values are specified in the URL parameters
-            viewRe: "-1.3734347650208165",
-            viewIm: "+0.0847181657743398",
+            viewRe: "-1.1875148812925351",
+            viewIm: "-0.3589885775655382",
 
             // zoom is the number of pixels per unit in the imaginary plane
-            zoom: "75000",
+            zoom: "1062",
 
             // number of significant figures that high precision number have
             // for low values / not specified: regular Javascript numbers are used
