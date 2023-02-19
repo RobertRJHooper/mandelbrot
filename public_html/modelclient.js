@@ -115,7 +115,7 @@ class PanelsClient {
 
         // reference counter to check for expired snaps
         this.reference = 0;
-        this.iterations = 0;
+        this.statistics = {};
 
         // snaps of panels and updated snaps since last flush
         this.snapshots = new Map();
@@ -162,7 +162,7 @@ class PanelsClient {
 
         // update reference counters
         this.reference += 1;
-        this.iterations = 0;
+        this.statistics = {};
 
         // send to workers
         this.workers.forEach(worker => {
@@ -218,6 +218,14 @@ class PanelsClient {
         }
     }
 
+    updateStatistics(statistics) {
+        const prevIterations = this.statistics.iteration || 0;
+        
+        this.statistics = {
+            iteration: Math.max(statistics.iteration, prevIterations),
+        };
+    }
+
     workerMessage(message) {
         const { reference, snapshots, statistics } = message.data;
 
@@ -234,7 +242,7 @@ class PanelsClient {
         }
 
         // deal with statistics
-        if(statistics) this.statistics = statistics;
+        if(statistics) this.updateStatistics(statistics);
     }
 
     /* get updates since last flush */
