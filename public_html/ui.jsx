@@ -104,9 +104,6 @@ class App extends React.Component {
                 this.hideUserInterface();
             }
         };
-
-        // reset focus - so mobile tooltips disappear after a menu item is clicked
-        this.resetFocus = () => this.container.current && this.container.current.focus();
     }
 
     // outer render before dimensions are known
@@ -172,11 +169,11 @@ class App extends React.Component {
                 />
 
                 <Navbar
-                    onReset={() => this.setState(App.homeView) && this.resetFocus()}
+                    onReset={() => this.setState(App.homeView)}
                     mouseMode={this.state.mouseMode}
-                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' })) && this.resetFocus()}
+                    onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' })) }
                     sampleVisible={sampleVisible}
-                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible })) && this.resetFocus()}
+                    onSampleToggle={() => this.setState(state => ({ sampleVisible: !state.sampleVisible })) }
                     visible={userInterfaceVisible}
                 />
             </div>
@@ -872,21 +869,19 @@ class Navbar extends React.Component {
 
         return (
             <div className={visible ? "navbar visible" : "navbar"}>
+                <div className={mouseMode == 'box-select' ? "navbar-item navbar-item-active" : "navbar-item"} onClick={onSelectBox} >
+                    {/* selection square icon to activate box selection */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
+                        <path d="M2 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM0 2a2 2 0 0 1 3.937-.5h8.126A2 2 0 1 1 14.5 3.937v8.126a2 2 0 1 1-2.437 2.437H3.937A2 2 0 1 1 1.5 12.063V3.937A2 2 0 0 1 0 2zm2.5 1.937v8.126c.703.18 1.256.734 1.437 1.437h8.126a2.004 2.004 0 0 1 1.437-1.437V3.937A2.004 2.004 0 0 1 12.063 2.5H3.937A2.004 2.004 0 0 1 2.5 3.937zM14 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM2 13a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm12 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />
+                    </svg>
+                </div>
+
                 <div className="navbar-item" onClick={onReset}>
                     {/* house icon */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L8 2.207l6.646 6.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.707 1.5Z" />
                         <path d="m8 3.293 6 6V13.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5V9.293l6-6Z" />
                     </svg>
-                    <span className="navbar-item-tooltip">Fully zoom out</span>
-                </div>
-
-                <div className={mouseMode == 'box-select' ? "navbar-item navbar-item-active" : "navbar-item"} onClick={onSelectBox} >
-                    {/* selection square icon to activate box selection */}
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
-                        <path d="M2 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM0 2a2 2 0 0 1 3.937-.5h8.126A2 2 0 1 1 14.5 3.937v8.126a2 2 0 1 1-2.437 2.437H3.937A2 2 0 1 1 1.5 12.063V3.937A2 2 0 0 1 0 2zm2.5 1.937v8.126c.703.18 1.256.734 1.437 1.437h8.126a2.004 2.004 0 0 1 1.437-1.437V3.937A2.004 2.004 0 0 1 12.063 2.5H3.937A2.004 2.004 0 0 1 2.5 3.937zM14 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM2 13a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm12 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />
-                    </svg>
-                    <span className="navbar-item-tooltip">Zoom to box</span>
                 </div>
 
                 <div className={sampleVisible ? "navbar-item navbar-item-active" : "navbar-item"} onClick={onSampleToggle}>
@@ -894,7 +889,6 @@ class Navbar extends React.Component {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
                         <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
                     </svg>
-                    <span className="navbar-item-tooltip">Select point sample</span>
                 </div>
 
             </div>

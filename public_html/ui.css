@@ -133,31 +133,6 @@
     height: 1em;
 }
 
-.navbar-item-tooltip {
-    visibility: hidden;
-    background-color: black;
-    color: white;
-    text-align: center;
-    width: 18ch;
-    border-radius: 6px;
-    padding: 5px 0;
-
-    /* Position the tooltip */
-    position: absolute;
-    z-index: 1;
-    top: 125%;
-    right: 0%;
-
-    /* fade */
-    opacity: 0;
-    transition: opacity 0.5s ease-out;
-}
-
-.navbar-item:hover .navbar-item-tooltip {
-    visibility: visible;
-    opacity: 1;
-}
-
 .visible {
     opacity: 1; 
  }
