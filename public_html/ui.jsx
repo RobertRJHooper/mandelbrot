@@ -880,6 +880,9 @@ class StatisticsDisplay extends React.Component {
         return (
             <div className="statistics">
                 <p>
+                z<sub>n+1</sub> = (z<sub>n</sub>)<sup>2</sup> + c
+                </p>
+                <p>
                     <b>View center (c)</b><br />
                     {StatisticsDisplay.floatFormat(viewRe)}<br />
                     {StatisticsDisplay.floatFormat(viewIm)}i<br />
@@ -891,7 +894,7 @@ class StatisticsDisplay extends React.Component {
                 </p>
 
                 <p>
-                    <b>Iteration</b><br />
+                    <b>Iteration (n)</b><br />
                     {statistics && statistics.iteration || 0}<br />
                 </p>
 
