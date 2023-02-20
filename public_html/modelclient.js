@@ -1,9 +1,8 @@
-"use strict";
-
 /**
  * Here are found classes that bridge the user interface and the worker backend
- */
+*/
 
+"use strict";
 
 /* Class to handle convertions from screen coordinates to the complex plane */
 class ModelGeometry {

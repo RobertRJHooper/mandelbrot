@@ -1,3 +1,7 @@
+/**
+ * Arithmetic functions that can operate on arbitary levels of precision
+ */
+
 "use strict";
 
 /**
@@ -11,7 +15,7 @@ function NativeArithmetic() {
     precision: "native",
     N: N,
     toNumber: x => x,
-    toBigInt: x => BigInt(x.toString()),
+    toBigInt: x => BigInt(x),
 
     mul: (a, b) => a * b,
     div: (a, b) => a / b,
@@ -64,7 +68,7 @@ function DecimalArithmetic(precision) {
     },
 
     toNumber: x => x.toNumber(),
-    toBigInt: x => BigInt(x.toString()),
+    toBigInt: x => BigInt(x.toFixed(0)),
 
     mul: N.mul.bind(N),
     div: N.div.bind(N),
