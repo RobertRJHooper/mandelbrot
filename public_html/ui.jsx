@@ -252,6 +252,7 @@ class App extends React.Component {
     /* Pull the view from the URL to the state */
     pullStateFromURL() {
         const current = this.getURLParams();
+        console.debug("pulling state from URL");
         current && this.setState(current);
     }
 
@@ -264,17 +265,16 @@ class App extends React.Component {
         const changed = !current
             || current.viewRe != viewRe
             || current.viewIm != viewIm
-            || current.zoom != zoom
-            || current.precision != precision;
+            || current.zoom != zoom;
 
         // update URL on change
         if (changed) {
+            console.debug("pushing state to URL");
             const url = new URL(window.location);
             const searchParams = url.searchParams;
             searchParams.set('re', viewRe);
             searchParams.set('im', viewIm);
             searchParams.set('zoom', zoom);
-            precision && searchParams.set('precision', precision);
             window.history.pushState({}, '', url);
         }
     }
