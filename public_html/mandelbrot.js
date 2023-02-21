@@ -10,6 +10,7 @@
 class Point {
   /**
   * Create a point
+  * @constructor
   * @param {object} re - Real value of the complex point
   * @param {object} im - Imaginary value of the complex point
   */
@@ -148,6 +149,7 @@ class MainCardiod {
 
   /**
    * Constructor for the class that uses the current global Artithmetic at time of creation
+   * @constructor
    */
   constructor() {
     const { N } = Arithmetic;
@@ -215,6 +217,7 @@ class MainCardiod {
 class Bulb {
   /**
    * Contructor for the bulb class.
+   * @constructor
    * @param {object} re - Real point of the center of the bulb
    * @param {object} im - Imaginary point of the center of the bulb
    * @param {object} radius - Radius of the bulb in the complex plane

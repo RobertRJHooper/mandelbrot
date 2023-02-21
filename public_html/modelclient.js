@@ -6,19 +6,37 @@
 
 /* Class to handle convertions from screen coordinates to the complex plane */
 class ModelGeometry {
+    /**
+     * Create an instance based on a center point in the complex plane,
+     * a zoom level and the required arithmetic precision. The input parameters
+     * are objects that correspond to the Arithmetic system required or decimal
+     * strings.
+     * @constructor
+     * @param {object} center_re - Real coordinate of the center of the view on complex plane
+     * @param {object} center_im - Imaginary coordinate of the center of the view on the complex plane
+     * @param {object} zoom - A value representing the number of pixels per unit on the complex plane
+     * @param {object} precision - Minimum number of decimal places to calculate to. 0 or null for Javascript native Numbers
+   */
     constructor(center_re, center_im, zoom, precision) {
-        this.A = getArithmetic(precision);
+        this.Arithmetic = getArithmetic(precision);
 
         // parse to number objects
-        const N = this.A.N;
+        const { N } = this.Arithmetic;
         this.center_re = N(center_re);
         this.center_im = N(center_im);
         this.zoom = N(zoom);
     }
 
-    /* helper to convert pixel coordinates to imaginary plane point */
+    /** 
+     * helper to convert pixel coordinates in a rectangle to imaginary plane point
+     * @param {integer} width - width of the rectangle in pixels
+     * @param {integer} height - height of the rectangle in pixels
+     * @param {integer} x - Distance from the left edge of the rectangle
+     * @param {integer} y - Distance from the top edge of the rectangle
+     * @returns {object} - A object with re and im fields with the point in the instance Arithmetic system
+     * */
     rectToImaginary(width, height, x, y) {
-        const { add, sub, mul, div } = this.A;
+        const { add, sub, mul, div } = this.Arithmetic;
         const { center_re, center_im, zoom } = this;
 
         // pixels from center point
@@ -32,18 +50,27 @@ class ModelGeometry {
         return { re: re, im: im }
     }
 
-    /* helper to convert imaginary plane point to pixel coordinates */
-    imaginaryToRect(width, height, point_re, point_im) {
-        const { N, toNumber, add, sub, mul, div } = this.A;
+    /** 
+     * helper to convert imaginary plane point to pixel coordinates in a rectange.
+     * The center of the rectangle corresponds to the center of the view defined in instance
+     * initiation.
+     * @param {integer} width - width of the rectangle in pixels
+     * @param {integer} height - height of the rectangle in pixels
+     * @param {object} re - Real point in the imaginary plane
+     * @param {object} im - Imaginary point in the imaginary plane
+     * @returns {object} - A object with x and y Number integer fields with the pixel coordinates in the rectangle.
+     * */
+    imaginaryToRect(width, height, re, im) {
+        const { N, toNumber, add, sub, mul, div } = this.Arithmetic;
         const { center_re, center_im, zoom } = this;
 
         // align precison
-        const point_re_ = N(point_re);
-        const point_im_ = N(point_im);
+        const re_ = N(re);
+        const im_ = N(im);
 
         // calculate pixels from center point
-        const pixels_re = mul(sub(point_re_, center_re), zoom);
-        const pixels_im = mul(sub(point_im_, center_im), zoom);
+        const pixels_re = mul(sub(re_, center_re), zoom);
+        const pixels_im = mul(sub(im_, center_im), zoom);
 
         // pixel offset from center of canvas
         const x = add(div(width, 2), pixels_re);
@@ -56,15 +83,28 @@ class ModelGeometry {
         };
     }
 
-    /* return the new zoom value give a further magnification factor */
+    /**
+     * Helper to get a new zoom value after a further zoom factor is applied
+     * @param {float} factor - The ratio to increase zoom e.g. 1.5
+     * @returns the new zoom value in current Arithmetic system
+     * */
     magnify(factor) {
-        const { N, mul, round } = this.A;
+        const { N, mul } = this.Arithmetic;
         return mul(this.zoom, N(factor));
     }
 
-    /* get canvas coordinates from panel coordinates */
+    /** 
+     * Get the pixel coordinates of a panel in a rectangle centered on the view center with width and height specified.
+     * @param {BigInt} panelX - The x coordinate in untis of panels from the origin of the complex plane
+     * @param {BigInt} panelY - The y coordinate in untis of panels from the origin of the complex plane
+     * @param {panelLength} integer - The length of each panel in pixels
+     * @param {integer} width - width of the rectangle in pixels
+     * @param {integer} height - height of the rectangle in pixels
+     * @param {float} postZoom - A further magnification factor that enlarges the view about the center after all other calculations are done
+     * @returns {object} - A object with left and top Number integer fields with the pixel coordinates in the rectangle of the top left point of the panel.
+     * */
     getPixelCoordinates(panelX, panelY, panelLength, width, height, postZoom) {
-        const { N, toBigInt, round, mul } = this.A;
+        const { N, toBigInt, round, mul } = this.Arithmetic;
         const { center_re, center_im, zoom } = this;
 
         // panel length as a bigint
@@ -96,7 +136,12 @@ class ModelGeometry {
 
 /**
  * Memoized helper function to get a ModelGeometry class
- */
+ * @param {object} re - Real point of the center of the view
+ * @param {object} im - Imaginary point of the center of the view
+ * @param {object} zoom - Pixels per unit in the complex plane
+ * @param {integer} precision - Decimal places of accuracy required or 0/null for native Javascript numbers
+ * @returns {ModelGeometry} - The requested ModelGeometry instance
+*/
 const getModelGeometry = _.memoize(
     (re, im, zoom, precision) => new ModelGeometry(re, im, zoom, precision),
     (...args) => (args.map(x => (x || "null").toString()).join(' '))
@@ -109,6 +154,10 @@ class PanelsClient {
     // ms to run before idling workers after the last flush call
     static timeToIdle = 1000;
 
+    /**
+     * Create an un-initiated instance.
+     * @constructor
+     */
     constructor() {
         this.workers = null;
 
@@ -129,6 +178,9 @@ class PanelsClient {
         this.statistics = {};
     }
 
+    /**
+     * Called once per live cycle - this starts workers.
+     */
     initiate() {
         const workerCount = Math.min(navigator.hardwareConcurrency || 1, PanelsClient.maxWorkerCount);
         console.debug(`initiating model with ${workerCount} workers`);
@@ -141,13 +193,21 @@ class PanelsClient {
         }
     }
 
+    /**
+     * Called once per live cycle - this terminates and releases workers.
+     */
     terminate() {
         console.debug('terminating model');
         this.workers && this.workers.forEach(w => w.terminate());
         this.workers = null;
     }
 
-    /* set the center and zoom level in the workers */
+    /**
+     * set the center and zoom level in the workers
+     * @param {object} zoom - Zoom in pixels per unit in complex plane as a decimal string or in the appropriate Arithmetic system
+     * @param {integer} precision - The precision level required for the Arithmetic system
+     * @returns Nothing returned
+     */
     setup(zoom, precision) {
         if (!this.workers || !this.workers.length) {
             console.error("no workers set up");
@@ -174,7 +234,15 @@ class PanelsClient {
         });
     }
 
-    /* set the center in the workers */
+    /**
+     * Set the center of the view in the workers and the width and height in pixels of the view.
+     * The workers will only work on panels (and hence points) in the view
+     * @param {object} re - The real coordinate of the view
+     * @param {object} im - The imaginary coordinate of the view
+     * @param {integer} width - The width of the view in pixels
+     * @param {integer} height - The height of the view in pixels
+     * @returns Nothing returned. 
+     */
     setView(re, im, width, height) {
         if (!width || !height) {
             console.debug("trivial view, nothing to do");
@@ -207,7 +275,10 @@ class PanelsClient {
         this.setIdleTime();
     }
 
-    // set the time that workers will idle
+    /**
+     * Update the time that workers will idle in the future to now plus
+     * PanelsClient.timeToIdle milliseconds.
+     */ 
     setIdleTime() {
         for (const worker of this.workers) {
             worker.postMessage({
@@ -217,14 +288,21 @@ class PanelsClient {
         }
     }
 
+    /**
+     * Private function used to update statistics with information returned
+     * from the workers.
+     */
     updateStatistics(statistics) {
         const prevIterations = this.statistics.iteration || 0;
-        
+
         this.statistics = {
             iteration: Math.max(statistics.iteration, prevIterations),
         };
     }
 
+    /**
+     * Worker message handler
+     */
     workerMessage(message) {
         const { reference, snapshots, statistics } = message.data;
 
@@ -241,10 +319,13 @@ class PanelsClient {
         }
 
         // deal with statistics
-        if(statistics) this.updateStatistics(statistics);
+        if (statistics) this.updateStatistics(statistics);
     }
 
-    /* get updates since last flush */
+    /**
+     * Get updates to the view since last time that flush was called.
+     * @returns {object} A pack of the snapshots and an indicator 'update' that shows if the flush starts from a blank view or is cumulative.
+     */
     flush() {
         const { updates, flushFromBlank } = this;
 
@@ -265,41 +346,5 @@ class PanelsClient {
             snapshots: snapshots,
             update: !flushFromBlank,
         }
-    }
-}
-
-class SampleClient {
-    constructor(callback) {
-        this.callback = callback;
-        this.worker = null;
-    }
-
-    initiate() {
-        this.worker = new Worker('sampleworker.js');
-        this.worker.onmessage = this.workerMessage.bind(this);
-    }
-
-    terminate() {
-        this.worker && this.worker.terminate();
-        this.worker = null;
-    }
-
-    submit(re, im, precision) {
-        const worker = this.worker;
-
-        if(!worker) {
-            console.warn('sample request submitted when worker not setup');
-            return;
-        }
-
-        worker.postMessage({
-            re: re.toString(),
-            im: im.toString(),
-            precision: precision,
-        });
-    }
-
-    workerMessage(message) {
-        this.callback && this.callback(message.data);
     }
 }

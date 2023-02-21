@@ -2,7 +2,6 @@ Next todo:
 reform functions comments
 add firefox prefixes webkit to css
 test in safari, firefox
-toBigInt crashes for 1e21 plus as strings are writen in scientific notation
 
 Features to make:
 
@@ -24,6 +23,7 @@ time limiting
 set focus on main div (away from nav bar etc on home click, box selection, sample mode)
 
 done:
+toBigInt crashes for 1e21 plus as strings are writen in scientific notation
 make stats accurate with multiple workers
 add scroll wheel zoom - using a library?
 make a info display area that appears on touches or mouse movement

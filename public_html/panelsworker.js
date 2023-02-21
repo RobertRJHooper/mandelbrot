@@ -1,3 +1,7 @@
+/**
+ * Worker script for iterating and painting points in the complex plane organised in panels.
+ */
+
 "use strict";
 
 importScripts(
@@ -12,18 +16,18 @@ importScripts(
 // multi-precision arithmetic currently in use
 var Arithmetic = null;
 
-// instances representing known areas of complex plane inside mbs
-// each instance has a function test(re, im) to check a point
+// Objects representing known areas of complex plane inside mbs
+// each object has a function test(re, im) to check an individual point
 // this must be refreshed if the Arithmetic global is updated
-var mbKnownRegions = null;
+var mbKnownRegions = [];
 
-// minmum period between image posts
+// minmum period between image posts back to client
 var frameThrottlePeriod = 250;
 
-// current running work
+// the current running work
 var current = {};
 
-// setup arithmetic, panels controller, etc
+/* Function to setup arithmetic, panels controller, etc */
 function setup() {
   const { reference, zoom, precision } = current.setup;
   console.debug('setting up with reference', reference);
@@ -39,7 +43,7 @@ function setup() {
   current.panels = new Panels(Arithmetic.N(zoom));
 }
 
-// set current view
+/** set current view */
 function setView() {
   const panels = current.panels;
 

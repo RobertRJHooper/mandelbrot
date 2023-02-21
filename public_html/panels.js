@@ -20,10 +20,11 @@ var hueCycle = _.range(hueCycleLength).map(i =>
     hslToRgb((i / hueCycleLength + 0.61) % 1, 0.9, 0.5)
 );
 
-/*
-static bounded point used when boundedness is determined by formula
-in one of the known regions
-*/
+/**
+ * An object representing points on the complex plane that
+ * have been determined by formula to be inside the Mandelbrot set
+ * and do not need iteration.
+ */
 class BoundedPoint {
     constructor() {
         this.determined = true;
@@ -31,8 +32,19 @@ class BoundedPoint {
     }
 }
 
-// grid representing a square of points on the complex plane
+/**
+ * A panel is a grid representing a square of points on the complex plane.
+ * The points are located by coordinates in units of panels.
+ * Each panel has constant width and height equal to panelLength pixels.
+ */
 class Panel {
+    /**
+     * Create an uninitiated panel instance
+     * @constructor
+     * @param {BigInt} panelX - x coordinate in the complex plane in units of panels
+     * @param {BigInt} panelY - y coordinate in the complex plane in units of panels
+     * @param {NumberObject} zoom - Pixels per unit of the complex plane
+     */
     constructor(panelX, panelY, zoom) {
         const { N, mul, div, add, sub, TWO } = Arithmetic;
 
@@ -62,6 +74,9 @@ class Panel {
         this.live = null;
     }
 
+    /**
+     * Private function used in initiation to create an array of points
+     */
     generatePoints() {
         const { center_re, center_im, zoom } = this;
         const { ONE, TWO, mul, div, add, sub } = Arithmetic;
@@ -87,7 +102,7 @@ class Panel {
         return panelGridEnumeration.map(idx => {
             const i = idx % panelLength;
             const c_re = grid_re[i];
-            
+
             const j = (idx - i) / panelLength;
             const c_im = grid_im[j];
 
@@ -103,9 +118,12 @@ class Panel {
         });
     }
 
+    /**
+     * Initiate the panel by creating the points required etc.
+     */
     initiate() {
         this.image = new ImageData(panelLength, panelLength);
-        
+
         // generate points and split to already determined and live
         const [determined, live] = _.partition(
             this.generatePoints(),
@@ -113,7 +131,7 @@ class Panel {
         );
 
         // paint determined points
-        if(determined.length) {
+        if (determined.length) {
             this.paint(determined);
             this.dirty = true;
         } else {
@@ -124,7 +142,9 @@ class Panel {
         this.live = live;
     }
 
-    /* paint determined points to the image */
+    /**
+     * Paint points to the panel image if the point status has been determined
+     */
     paint(points) {
         const imageData = this.image.data;
 
@@ -147,12 +167,20 @@ class Panel {
         });
     }
 
+    /**
+     * Get the current image of the panel as a bitmap
+     * @returns {Promise} A promise to an ImageBitmap
+     */
     flush() {
         this.dirty = false;
         return createImageBitmap(this.image);
     }
 
-    // iterate live points and paint ones that become determined
+    /**
+     * Perform one iteration on live undetermined points.
+     * If any point become determined then it will be painted to the image and discarded.
+     * If at least one pixel is determined in this iteration then the dirty flag is set to true.
+     */
     iterate() {
         const [determined, live] = _.partition(
             this.live,
@@ -170,9 +198,13 @@ class Panel {
     }
 }
 
-// panels controller for a given zoom level
-// this must be discarded if the global Artithmetic changes
+/* A controller class for organising the life cycle of panels. If the global Arithmetic system changes then instances must be recreated. */
 class Panels {
+    /**
+     * Create the controller.
+     * @constructor
+     * @params {object} The zoom level desired
+     */
     constructor(zoom) {
         this.zoom = zoom;
 
@@ -186,7 +218,18 @@ class Panels {
         this.iteration = 0;
     }
 
-    /* determine active panel coordinates around a center */
+    /**
+     * Determine active panels for a give view. Multi-worker stripping means that the current
+     * worker will only include panels with coordinates satisfying:
+     * (panelX + panelY) % step == offset
+     * @param {NumberObject} re - The real coordinate of the center of the view 
+     * @param {NumberObject} im - The imaginary coordinate of the center of the view
+     * @param {Integer} width - The width of the view in pixels
+     * @param {Integer} height - The height of the view in pixels
+     * @param {Integer} step - Used in multiworker stripping 
+     * @param {Integer} offset - Used in multiworker stripping
+     * @returns {Array.<[BigInt, BigInt]>} - The x, y coordinates of the visible panels in units of panels
+     */
     getPanelsForView(re, im, width, height, step, offset) {
         const { toBigInt, mul, div, floor } = Arithmetic;
         const { zoom } = this;
@@ -218,11 +261,10 @@ class Panels {
         return out;
     }
 
-    /*
-    Set the active panels based on an iterable of keys.
-    The key is also the coordinates in units of panels on the
-    imaginary plane
-    */
+    /**
+     * Set the active panels that will be calculated in the worker.
+     * @param {Array.<[BigInt, BigInt]>} coordinates - An array of panel coordinates in units of panels to set as active
+     */
     setActivePanels(coordinates) {
         this.activePanels = [];
 
@@ -241,16 +283,21 @@ class Panels {
         }
     }
 
-    // iterate all current panels
+    /**
+     * Iterate all active panels
+     */
     iterate() {
         for (const panel of this.activePanels) panel.iterate();
         this.iteration += 1;
     }
 
-    // return a list of bitmaps for updated (dirty) panels since last flush
+    /**
+     * Get bitmaps for all updated (dirty) active panels.
+     * @return {Promise} A promise to an array of snapshots. Each snapshot has the bitmap and coordinates of the dirty panel.
+     */ 
     flush() {
         const dirtyPanels = this.activePanels.filter(p => p.dirty);
-        
+
         // nothing new under the sun
         if (!dirtyPanels.length) return [];
 
@@ -261,12 +308,12 @@ class Panels {
             return {
                 panelX: panel.panelX,
                 panelY: panel.panelY,
-                length: panelLength,    
+                length: panelLength,
                 bitmap: await panel.flush(),
             }
         }
 
         // return promise of snapshots
-        return Promise.all(dirtyPanels.map(p => getSnapshot(p))); 
+        return Promise.all(dirtyPanels.map(p => getSnapshot(p)));
     }
 }
