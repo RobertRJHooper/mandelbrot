@@ -1,5 +1,6 @@
 /**
- * Worker script for iterating and painting points in the complex plane organised in panels.
+ * Worker script for iterating and painting
+ * points in the complex plane organised into panels.
  */
 
 "use strict";
@@ -13,7 +14,7 @@ importScripts(
   'panels.js'
 );
 
-// multi-precision arithmetic currently in use
+// worker-global multi-precision arithmetic currently in use
 var Arithmetic = null;
 
 // Objects representing known areas of complex plane inside mbs
@@ -21,150 +22,211 @@ var Arithmetic = null;
 // this must be refreshed if the Arithmetic global is updated
 var mbKnownRegions = [];
 
-// minmum period between image posts back to client
-var frameThrottlePeriod = 250;
+/**
+ * set globals that are used by model scripts. These are globals
+ * for speed and simplicity.
+ */
+function setGlobals(precision) {
+  console.debug('setting global worker arithmetic with precision parameter', precision);
 
-// the current running work
-var current = {};
-
-/* Function to setup arithmetic, panels controller, etc */
-function setup() {
-  const { reference, zoom, precision } = current.setup;
-  console.debug('setting up with reference', reference);
-  current.reference = reference;
-
-  // first setup the arithmetic structure used by worker
-  console.debug('setting arithmetic precision', precision);
+  // defined in arithmetic.js
   Arithmetic = getArithmetic(precision);
-  mbKnownRegions = getKnownRegions();
 
-  // set up panels controller
-  console.debug('setting zoom', zoom)
-  current.panels = new Panels(Arithmetic.N(zoom));
+  // defined in mandelbrot.js
+  mbKnownRegions = getKnownRegions();
 }
 
-/** set current view */
-function setView() {
-  const panels = current.panels;
+/* Class to control the life-cycle of the worker */
+class Controller {
 
-  if (!panels) {
-    console.warn('not setup with setting view');
-    return;
+  // minmum period between image posts back to client
+  static frameThrottlePeriod = 250;
+
+  /**
+   * Get a controlelr for a particular zoom level and precision
+   * @constructor
+   * @param {object} reference - Reference added to all messages back to the client
+   * @param {NumberObject} zoom - Zoom level in pixels per unit of complex plane
+   * @param {Integer} precision - The number of decimals accuracy in arithmetic calculations
+   */
+  constructor(reference, zoom) {
+    console.debug('controller reference', reference);
+    console.debug('controller zoom level', zoom);
+
+    this.reference = reference;
+    this.zoom = zoom;
+
+    // controller loop binding
+    this.loop = this.loop.bind(this);
+
+    // panels controller placeholder - this is set up by the work loop
+    this.panels = null;
+
+    // placeholder for changing the current view
+    // the work loop will pick up a new definition from this variable
+    this.requestedView = null;
+
+    // flag to exit the work loop
+    this.terminate = false;
   }
 
-  const { re, im, width, height, step, offset } = current.view;
-  console.debug('setting view at', re, im);
-  console.debug('setting view width', width);
-  console.debug('setting view height', height);
+  /**
+   * Set the active view
+   * @param {NumberObject} re The real value of the center of the view
+   * @param {NumberObject} im The imaginary value of the center of the view
+   * @param {Integer} width - The width of the view in pixels
+   * @param {Integer} height - The height of the view in pixels
+   * @param {Integer} step - The stride or step used in multi-worker panel stripping
+   * @param {Integer} offset - The offset used in multi-worker panel stripping
+  */
+  setView(re, im, width, height, step, offset) {
+    if (!this.panels) {
+      console.warn('Panels controoler not setup while setting view');
+      return;
+    }
 
-  const active = panels.getPanelsForView(
-    Arithmetic.N(re),
-    Arithmetic.N(im),
-    width,
-    height,
-    BigInt(step),
-    BigInt(offset)
-  );
+    console.debug('setting view real', re);
+    console.debug('setting view imag', im);
+    console.debug('setting view width', width);
+    console.debug('setting view height', height);
+    console.debug('worker panel stripping', step, offset);
+    const activePanels = this.panels.getPanelsForView(re, im, width, height, step, offset);
 
-  // set visible panels for calculation
-  console.debug('setting active panels numbering', active.length);
-  panels.setActivePanels(active);
+    // set visible panels for calculation
+    console.debug('setting active panels numbering', activePanels.length);
+    this.panels.setActivePanels(activePanels);
 
-  // make sure first issue of panels can go without pause
-  current.frameTime = 0;
+    // reset the issue time of the last frame of updates send to client
+    this.lastFrameTime = 0;
+  }
+
+  /**
+   * work function to do the next piece of work
+   * @return {Boolean} True iff something was done. False if idle
+   */
+  async work() {
+    if (!this.panels) {
+      this.panels = new Panels(this.zoom);
+      return true;
+    }
+
+    // new view has been requested
+    if (this.requestedView) {
+      const { re, im, width, height, step, offset } = this.requestedView;
+
+      // clear request so it is setup only once
+      this.requestedView = null;
+
+      this.setView(
+        Arithmetic.N(re),
+        Arithmetic.N(im),
+        width,
+        height,
+        BigInt(step),
+        BigInt(offset)
+      );
+
+      return true;
+    }
+
+    // get timestamp to throttle sending updates and iterating points
+    const timestamp = Date.now();
+    const active = this.timeToIdle > timestamp;
+    const postThrottled = timestamp < this.lastFrameTime + Controller.frameThrottlePeriod;
+
+    // post statistics
+    if (active && !postThrottled) {
+      const statistics = {
+        iteration: this.panels.iteration,
+      };
+
+      postMessage({
+        reference: this.reference,
+        statistics: statistics,
+      });
+    }
+
+    // post dirty panels
+    if (active && !postThrottled) {
+      const snapshots = await this.panels.flush();
+
+      if (snapshots.length) {
+        postMessage({
+          reference: this.reference,
+          snapshots: snapshots,
+        }, snapshots.map(s => s.bitmap));
+
+        this.lastFrameTime = timestamp;
+        return true;
+      }
+    }
+
+    // iterate points in each active panel
+    if (active) {
+      this.panels.iterate();
+      return true;
+    }
+
+    // nothing to do
+    return false;
+  }
+
+  async loop() {
+    if (this.terminate) return;
+    const workDone = await this.work();
+    const pause = workDone ? 0 : 100;
+    setTimeout(this.loop, pause);
+  }
 }
 
-// incoming message handler
-onmessage = function (e) {
-  switch (e.data.command) {
+// current controller for this worker
+var controller = null;
+
+/* handler for messages from the master */
+onmessage = function (message) {
+  switch (message.data.command) {
     case 'setup': {
-      current.setup = e.data;
-      current.dirtySetup = true;
+      const { zoom, reference, precision } = message.data;
+
+      // terminate current controller and stop the loop
+      if (controller) {
+        controller.terminate = true;
+        controller = null;
+      }
+
+      // setup new global environment
+      setGlobals(precision);
+
+      // set up new controller
+      controller = new Controller(reference, Arithmetic.N(zoom));
+
+      // schedule the start of the controller loop
+      setTimeout(controller.loop, 0);
       break;
     }
 
     case 'view': {
-      current.view = e.data;
-      current.dirtyView = true;
+      if (!controller) {
+        console.warn('view requested before controller setup');
+        break;
+      }
+
+      console.debug('requesting new view');
+      controller.requestedView = message.data;
       break;
     }
 
     case 'limit': {
-      current.timeToIdle = e.data.timeToIdle;
+      if (!controller) {
+        console.warn('time limit update requested before controller setup');
+        break;
+      }
+
+      controller.timeToIdle = message.data.timeToIdle;
       break;
     }
 
     default:
-      throw new Error(`unknown worker command "${e.data.command}" received`);
+      throw new Error(`unknown worker command "${message.data.command}" received`);
   }
 }
-
-// work loop. returns true iff some work was done.
-async function loop() {
-
-  // setup the worker from the global configuation
-  if (current.dirtySetup) {
-    current.dirtySetup = false;
-    setup();
-    return true;
-  }
-
-  // nothing to do if nothing is set up
-  if (!current.panels)
-    return false;
-
-  // setup view
-  if (current.dirtyView) {
-    current.dirtyView = false;
-    setView();
-    return true;
-  }
-
-  // get timestamp to throttle sending updates and iterating points
-  const timestamp = Date.now();
-  const active = current.timeToIdle > timestamp;
-
-  // post dirty panels to the master
-  if (active && timestamp > current.frameTime + frameThrottlePeriod) {
-    const statistics = {
-      iteration: current.panels.iteration,
-    };
-
-    // post statistics
-    postMessage({
-      reference: current.reference,
-      statistics: statistics,
-    });
-
-    // post panel updates
-    const snapshots = await current.panels.flush();
-    if (snapshots.length) {
-      postMessage({
-        reference: current.reference,
-        snapshots: snapshots,
-      },
-        snapshots.map(s => s.bitmap)
-      );
-
-      // update throttling information
-      current.frameTime = timestamp;
-      return true;
-    }
-  }
-
-  // iterate points in each active panel
-  if (active) {
-    current.panels.iterate();
-    return true;
-  }
-
-  // nothing to do
-  return false;
-}
-
-async function runLoop() {
-  const workDone = await loop();
-  const pause = workDone ? 0 : 100;
-  setTimeout(runLoop, pause);
-}
-runLoop();
