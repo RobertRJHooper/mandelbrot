@@ -24,5 +24,5 @@ jobs:
       - name: 📁 Clear Target Folder
         run: lftp -e "glob -a rm -r *" ${{ secrets.FTP_HOSTNAME }}
       - name: 📁 Upload Folder
-        run: lftp -e "mirror --parallel=100 -R public_html /" ${{ secrets.FTP_HOSTNAME }}
+        run: lftp -e "mirror --parallel=100 -R . /" ${{ secrets.FTP_HOSTNAME }}
 
