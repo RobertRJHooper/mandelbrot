@@ -568,11 +568,18 @@ class Selector extends React.Component {
         mouseMode: 'pan',
     }
 
-    /**
-     * Time between last wheel event and reporting end of zoom
-     */
+    /* Time between last wheel event and reporting end of zoom */
     static wheelZoomTerminationDelay = 1000;
 
+    /* Maximum zoom factor for one go at wheel and pinch zooming */
+    static wheelZoomFactorClamp = 10;
+
+    /* Pacing for wheel zoom (from touchpad) */
+    static wheelZoomThrottlePeriod = 200;
+
+    /**
+     * @constructor
+     */
     constructor(props) {
         super(props);
 
@@ -609,6 +616,14 @@ class Selector extends React.Component {
         this.handlePan = this.handlePan.bind(this);
         this.handlePinch = this.handlePinch.bind(this);
         this.handlePress = this.handlePress.bind(this);
+
+        // zooming by touchpad and wheel on a mouse are handled by the
+        // same event but have very different effects
+        // we using debouncing and a step funciton to make the effect similar
+        this.handleWheelThrottled = _.throttle(
+            this.handleWheel,
+            Selector.wheelZoomThrottlePeriod
+        );
     }
 
     /**
@@ -618,10 +633,10 @@ class Selector extends React.Component {
     getCursorClass() {
         if (this.props.mouseMode == "box-select")
             return "boxselecting";
-        
+
         if (this.props.mouseMode == "pan")
             return this.state.startPoint ? "grabbing" : "grabbable";
-        
+
         console.warn("unknown state selecting cursor");
         return "";
     }
@@ -654,7 +669,7 @@ class Selector extends React.Component {
             hammer.on('press', this.handlePress);
 
             const hamster = this.hamster = new Hamster(this.divListening);
-            hamster.wheel(this.handleWheel);
+            hamster.wheel(this.handleWheelThrottled);
 
             // standard listener for hovering event and stroll wheel
             this.divListening.addEventListener('mousemove', this.handleHover);
@@ -701,7 +716,7 @@ class Selector extends React.Component {
      * @param {Integer} x1 - Horizontal coordinate of second corner
      * @param {Integer} y1 - Vertical coordinate of second corner
      * @returns {Object} Rectangle definied with top, left, width, height fields
-    */ 
+    */
     boxGeometry(x0, y0, x1, y1) {
         const rect = {
             left: x0,
@@ -746,6 +761,8 @@ class Selector extends React.Component {
     }
 
     handleHover(e) {
+        //console.debug('hover event');
+
         const position = this.getLocalCoordinates(e.clientX, e.clientY);
         const { startPoint, currentPoint } = this.state;
 
@@ -755,6 +772,7 @@ class Selector extends React.Component {
     }
 
     handlePan(e) {
+        // console.debug('pan event');
         const position = this.getLocalCoordinates(e.center.x, e.center.y);
 
         switch (e.type) {
@@ -796,6 +814,7 @@ class Selector extends React.Component {
     }
 
     handlePinch(e) {
+        // console.debug('pinch event');
         const scale = e.scale;
 
         // at the moment all zooming is from center point
@@ -821,17 +840,30 @@ class Selector extends React.Component {
         }
     }
 
+    /* hand wheel and touchpad double finger zoom gesture that is handled in browsers as wheel */
     handleWheel(event, delta, deltaX, deltaY) {
+        //console.debug('wheel event', event);
+
         this.setState(state => {
-            const wheelZoom = state.wheelZoom * Math.pow(1.3, deltaY);
-            this.props.onZoomChange(wheelZoom);
-            return { wheelZoom: wheelZoom };
+            const stepY = Math.sign(deltaY);
+            const wheelZoom = state.wheelZoom * Math.pow(1.3, stepY);
+            const wheelZoomClamped = Math.min(Math.max(wheelZoom, 1 / Selector.wheelZoomFactorClamp), Selector.wheelZoomFactorClamp);
+            const wheelZoomChanged = wheelZoomClamped != state.wheelZoom;
+
+            // nothing to report do?
+            if (!wheelZoomChanged) return;
+
+            // something to report
+            this.props.onZoomChange(wheelZoomClamped);
+            return { wheelZoom: wheelZoomClamped };
         });
+
+        // schedule debounced termination of the zoom process
         this.terminateWheelZoom();
     }
 
     handlePress(e) {
-        console.log('press', e);
+        // console.debug('press event');
     }
 }
 
