@@ -1,3 +1,6 @@
+# !! this script has security issues
+# not to be used in a professional environment
+
 name: 🚀 FTP Deploy
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
 on:
