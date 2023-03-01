@@ -1,5 +1,4 @@
 Next todo:
-Move up files from public_html
 
 Features to make:
 
@@ -15,13 +14,14 @@ add cross to sampler point and make the first point blue
 sampler will breakdown at high zoom as canvas coordinates overflow - fix
 allow canvas width and height to be specified or set to auto
 javascript modules - how to with comments
-github releases mechanism for continous deployment
 convert numbered points to html elements so they zoom properly
 time limiting
 set focus on main div (away from nav bar etc on home click, box selection, sample mode)
 add firefox prefixes webkit to css
 
 done:
+github releases mechanism for continous deployment
+Move up files from public_html
 reform functions comments
 test in safari, firefox
 toBigInt crashes for 1e21 plus as strings are writen in scientific notation
