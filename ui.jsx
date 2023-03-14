@@ -57,10 +57,13 @@ class App extends React.Component {
             // statistics from main calculation workers
             statistics: null,
 
-            // flag that shows the statistics and navbar
-            // when set to false the stats and navbar will fade after
+            // flag that shows the navbar
+            // when set to false the navbar will fade after
             // a few seconds via style sheet mechanism
-            userInterfaceVisible: false,
+            navbarVisible: false,
+
+            // are stats visible in a little stats window
+            statsVisible: false,
         }
 
         // keep track of container dimensions
@@ -90,15 +93,15 @@ class App extends React.Component {
         // this.sampler = new SampleClient(this.onSampleAvailable.bind(this));
 
         // auto hide userinterface when nothing happens
-        this.hideUserInterface = _.debounce(
-            () => this.setState({ userInterfaceVisible: false }),
+        this.hideNavbar = _.debounce(
+            () => this.setState({ navbarVisible: false }),
             App.userInterfaceHideDelay
         );
 
-        this.showUserInterface = () => {
-            if (!this.state.userInterfaceVisible) {
-                this.setState({ userInterfaceVisible: true });
-                this.hideUserInterface();
+        this.showNavbar = () => {
+            if (!this.state.navbarVisible) {
+                this.setState({ navbarVisible: true });
+                this.hideNavbar();
             }
         };
     }
@@ -131,7 +134,8 @@ class App extends React.Component {
             width,
             height,
             statistics,
-            userInterfaceVisible,
+            navbarVisible,
+            statsVisible,
         } = this.state;
 
         return (
@@ -148,7 +152,7 @@ class App extends React.Component {
                     viewRe={viewRe} viewIm={viewIm} zoom={zoom} precision={precision}
                     statistics={statistics}
                     // sample={sample}
-                    visible={userInterfaceVisible}
+                    visible={statsVisible}
                 />
 
                 <Selector
@@ -164,7 +168,9 @@ class App extends React.Component {
                     onReset={() => this.setState(App.homeView)}
                     mouseMode={this.state.mouseMode}
                     onSelectBox={() => this.setState(state => ({ mouseMode: state.mouseMode == 'pan' ? 'box-select' : 'pan' }))}
-                    visible={userInterfaceVisible}
+                    onStatsToggle={() => this.setState(state => ({ statsVisible: !state.statsVisible }))}
+                    visible={navbarVisible}
+                    statsToggle={statsVisible}
                 />
             </div>
         );
@@ -183,7 +189,7 @@ class App extends React.Component {
         // this.sampler.initiate();
 
         // show interface initially
-        this.showUserInterface();
+        this.showNavbar();
     }
 
     componentWillUnmount() {
@@ -193,7 +199,7 @@ class App extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        const { viewRe, viewIm, zoom, precision, showUserInterface } = this.state;
+        const { viewRe, viewIm, zoom, precision } = this.state;
 
         // update the URL
         const viewChanged = 0
@@ -319,7 +325,7 @@ class App extends React.Component {
      * Notification of mouse hover over the main container.
      */
     onPointHover(x, y) {
-        this.showUserInterface();
+        this.showNavbar();
     }
 
     /**
@@ -344,7 +350,7 @@ class App extends React.Component {
         });
 
         // show user interface for a while
-        this.showUserInterface();
+        this.showNavbar();
     }
 
     /**
@@ -369,7 +375,7 @@ class App extends React.Component {
         });
 
         // show user interface for a while
-        this.showUserInterface();
+        this.showNavbar();
     }
 
     /**
@@ -408,7 +414,7 @@ class App extends React.Component {
         });
 
         // show user interface for a while
-        this.showUserInterface();
+        this.showNavbar();
     }
 }
 
@@ -871,6 +877,7 @@ class Selector extends React.Component {
 class Navbar extends React.Component {
     static defaultProps = {
         visible: false,
+        statsToggle: false,
 
         // 'pan' and 'box-select' mouse mode
         mouseMode: 'pan',
@@ -878,6 +885,7 @@ class Navbar extends React.Component {
         // callback functions
         onReset: null,
         onSelectBox: null,
+        onStatsToggle: null,
     }
 
     constructor(props) {
@@ -888,14 +896,23 @@ class Navbar extends React.Component {
         const {
             visible,
             mouseMode,
-
+            statsToggle,
+            
             // callbacks
             onReset,
             onSelectBox,
+            onStatsToggle,
         } = this.props;
 
         return (
             <div className={visible ? "navbar visible" : "navbar"}>
+                <div className={statsToggle ? "navbar-item navbar-item-active" : "navbar-item"} onClick={onStatsToggle} >
+                    {/* show or hide the stats box */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
+                        <path d="m9.708 6.075-3.024.379-.108.502.595.108c.387.093.464.232.38.619l-.975 4.577c-.255 1.183.14 1.74 1.067 1.74.72 0 1.554-.332 1.933-.789l.116-.549c-.263.232-.65.325-.905.325-.363 0-.494-.255-.402-.704l1.323-6.208Zm.091-2.755a1.32 1.32 0 1 1-2.64 0 1.32 1.32 0 0 1 2.64 0Z" />
+                    </svg>
+                </div>
+
                 <div className={mouseMode == 'box-select' ? "navbar-item navbar-item-active" : "navbar-item"} onClick={onSelectBox} >
                     {/* selection square icon to activate box selection */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="navbar-icon" viewBox="0 0 16 16">
